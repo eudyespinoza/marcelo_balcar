@@ -1395,6 +1395,12 @@ paths:
     get:
       operationId: api_v1_services_list
       parameters:
+      - in: query
+        name: assigned_to_me
+        schema:
+          type: boolean
+        description: Limita el resultado a los servicios asignados al perfil técnico
+          de la sesión.
       - name: page
         required: false
         in: query
@@ -1845,6 +1851,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ServiceList'
+          description: ''
+  /api/v1/settings/:
+    get:
+      operationId: api_v1_settings_retrieve
+      tags:
+      - api
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationSettings'
+          description: ''
+    patch:
+      operationId: api_v1_settings_partial_update
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedApplicationSettings'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedApplicationSettings'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedApplicationSettings'
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationSettings'
           description: ''
   /api/v1/sync-conflicts/:
     get:
@@ -2351,6 +2395,18 @@ components:
       - legacy_id
       - legacy_locked
       - updated_at
+    ApplicationSettings:
+      type: object
+      properties:
+        base_message:
+          type: string
+          maxLength: 500
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - updated_at
     ChangePassword:
       type: object
       properties:
@@ -2479,10 +2535,49 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ServiceList'
+        overview:
+          type: object
+          additionalProperties: {}
+        finance:
+          type: object
+          additionalProperties: {}
+          nullable: true
+        service_trend:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        revenue_trend:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        status_breakdown:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        technician_workload:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        payment_methods:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
       required:
       - counts
       - date
+      - finance
+      - overview
+      - payment_methods
+      - revenue_trend
+      - service_trend
       - services
+      - status_breakdown
+      - technician_workload
     DataIssue:
       type: object
       properties:
@@ -2865,6 +2960,16 @@ components:
           type: string
           format: date-time
           readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedApplicationSettings:
+      type: object
+      properties:
+        base_message:
+          type: string
+          maxLength: 500
         updated_at:
           type: string
           format: date-time
@@ -3911,8 +4016,12 @@ components:
           items:
             type: string
           readOnly: true
+        is_technician:
+          type: boolean
+          readOnly: true
       required:
       - id
+      - is_technician
       - permissions
       - roles
       - username

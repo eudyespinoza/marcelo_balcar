@@ -19,10 +19,14 @@ const adminNav = [
 ];
 const technicianNav = { to: "/tecnico", label: "Mis servicios", icon: UserRoundCog };
 
-export function navigationForUser(user: Pick<User, "roles" | "permissions" | "is_technician">) {
-  if (user.is_technician) return [technicianNav];
+export function isTechnicianOnly(user: Pick<User, "permissions" | "is_technician">) {
+  return user.is_technician && !user.permissions.includes("operations.view_dashboard");
+}
 
+export function navigationForUser(user: Pick<User, "roles" | "permissions" | "is_technician">) {
   const permittedAdminLinks = adminNav.filter((item) => item.permissions.some((permission) => user.permissions.includes(permission)));
+  if (isTechnicianOnly(user)) return [technicianNav];
+  if (user.is_technician) return [...permittedAdminLinks.slice(0, 3), technicianNav, ...permittedAdminLinks.slice(3)];
   return permittedAdminLinks;
 }
 

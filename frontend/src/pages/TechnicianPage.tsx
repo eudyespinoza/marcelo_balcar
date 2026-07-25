@@ -14,7 +14,7 @@ type TechTab = "today" | "upcoming" | "history";
 export function TechnicianPage() {
   const queryClient = useQueryClient(); const [tab, setTab] = useState<TechTab>("today"); const [selected, setSelected] = useState<Service | null>(null); const [notes, setNotes] = useState(""); const [offlineFallback, setOfflineFallback] = useState<Service[]>([]); const [message, setMessage] = useState("");
   const services = useQuery({ queryKey: ["services", "technician"], queryFn: async () => {
-    const items = resultList(await api<Service[] | { results: Service[] }>("/services/?page_size=200")); await cacheServices(items); return items;
+    const items = resultList(await api<Service[] | { results: Service[] }>("/services/?assigned_to_me=true&page_size=200")); await cacheServices(items); return items;
   }, refetchInterval: 45_000 });
   useEffect(() => { if (services.isError) void offlineDb.services.toArray().then(setOfflineFallback); }, [services.isError]);
   useEffect(() => { const run = () => void syncOffline().then(() => queryClient.invalidateQueries({ queryKey: ["services"] })).catch(() => void 0); addEventListener("online", run); return () => removeEventListener("online", run); }, [queryClient]);

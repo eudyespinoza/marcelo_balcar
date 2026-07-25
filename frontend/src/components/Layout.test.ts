@@ -1,22 +1,34 @@
 /* @vitest-environment jsdom */
 import { describe, expect, it } from "vitest";
-import { mobileNavigationGroups, navigationForUser } from "./Layout";
+import { isTechnicianOnly, mobileNavigationGroups, navigationForUser } from "./Layout";
 
 describe("navigationForUser", () => {
-  it("keeps a technician focused on assigned services even with administrative roles", () => {
+  it("combines all administrative menus with assigned services for a mixed account", () => {
     const links = navigationForUser({
       roles: ["Superadmin", "Administrador", "Coordinador", "Técnico"],
-      permissions: ["operations.view_dashboard", "operations.manage_users"],
+      permissions: [
+        "operations.view_dashboard", "operations.view_client", "operations.view_service",
+        "operations.view_daily_cash", "operations.view_dataissue", "operations.manage_users",
+        "operations.change_applicationsettings"
+      ],
       is_technician: true
     });
 
-    expect(links.map((link) => link.label)).toEqual(["Mis servicios"]);
+    expect(links.map((link) => link.label)).toEqual([
+      "Operación", "Dashboard", "Clientes", "Mis servicios", "Agenda", "Caja", "Incidencias", "Seguridad", "Configuración"
+    ]);
   });
 
   it("keeps an exclusively technical account focused on its assigned work", () => {
-    const links = navigationForUser({ roles: ["Técnico"], permissions: ["operations.view_service"], is_technician: true });
+    const user = { roles: ["Técnico"], permissions: ["operations.view_service"], is_technician: true };
+    const links = navigationForUser(user);
 
     expect(links.map((link) => link.label)).toEqual(["Mis servicios"]);
+    expect(isTechnicianOnly(user)).toBe(true);
+  });
+
+  it("does not classify an administrative technician as technician-only", () => {
+    expect(isTechnicianOnly({ permissions: ["operations.view_dashboard"], is_technician: true })).toBe(false);
   });
 
   it("does not expose the technical workspace without the Técnico role", () => {

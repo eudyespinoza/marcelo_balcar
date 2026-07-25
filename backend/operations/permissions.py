@@ -13,7 +13,7 @@ def in_group(user, name):
 
 
 def is_technician(user):
-    if not user or not user.is_authenticated or user.is_superuser:
+    if not user or not user.is_authenticated:
         return False
     if in_group(user, GROUP_TECHNICIAN):
         return True
@@ -24,6 +24,18 @@ def is_technician(user):
     return True
 
 
+def has_administrative_workspace(user):
+    return bool(
+        user
+        and user.is_authenticated
+        and (user.is_superuser or user.has_perm("operations.view_dashboard"))
+    )
+
+
+def is_restricted_technician(user):
+    return is_technician(user) and not has_administrative_workspace(user)
+
+
 def get_technician_profile(user) -> TechnicianProfile | None:
     try:
         profile = user.technician_profile
@@ -32,10 +44,16 @@ def get_technician_profile(user) -> TechnicianProfile | None:
     return profile if profile.active else None
 
 
+def assigned_services(user, queryset=None):
+    queryset = queryset if queryset is not None else Service.objects.all()
+    profile = get_technician_profile(user)
+    return queryset.filter(assigned_technician=profile) if profile else queryset.none()
+
+
 def can_operate_service(user, service: Service):
     if user.is_superuser:
         return True
-    if not is_technician(user):
+    if not is_restricted_technician(user):
         return user.has_perm("operations.change_service")
     profile = get_technician_profile(user)
     return bool(profile and service.assigned_technician_id == profile.id and service.archived_at is None)
@@ -43,10 +61,9 @@ def can_operate_service(user, service: Service):
 
 def scoped_services(user, queryset=None):
     queryset = queryset if queryset is not None else Service.objects.all()
-    if user.is_superuser or not is_technician(user):
+    if not is_restricted_technician(user):
         return queryset
-    profile = get_technician_profile(user)
-    return queryset.filter(assigned_technician=profile) if profile else queryset.none()
+    return assigned_services(user, queryset)
 
 
 class HasModelPermission(BasePermission):

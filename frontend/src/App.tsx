@@ -6,7 +6,7 @@ import { api } from "./lib/api";
 import { clearOfflineData, pendingCount, syncOffline } from "./lib/offline";
 import { useOperationsSocket } from "./hooks/useOperationsSocket";
 import type { Session } from "./types";
-import { Layout } from "./components/Layout";
+import { isTechnicianOnly, Layout } from "./components/Layout";
 import { BrandLogo } from "./components/BrandLogo";
 import { LoginPage } from "./pages/LoginPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
@@ -62,7 +62,7 @@ function App() {
 
   const user = session.data.user;
   if (user.must_change_password) return <ChangePasswordPage onChanged={() => void session.refetch()} />;
-  const technicianOnly = user.is_technician;
+  const technicianOnly = isTechnicianOnly(user);
   const canViewDelinquency = user.permissions.includes("operations.view_client_sensitive");
   const canManageSettings = user.permissions.includes("operations.change_applicationsettings");
   const logout = async () => {
@@ -80,7 +80,7 @@ function App() {
         <Route path="/clientes" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <ClientsPage canViewDelinquency={canViewDelinquency} />} />
         <Route path="/clientes/:id" element={<ClientDetailPage technician={technicianOnly} />} />
         <Route path="/calendario" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <CalendarPage />} />
-        <Route path="/tecnico" element={<TechnicianPage />} />
+        <Route path="/tecnico" element={user.is_technician ? <TechnicianPage /> : <Navigate to="/" replace />} />
         <Route path="/caja" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <CashPage />} />
         <Route path="/seguridad" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <SecurityPage permissions={user.permissions} />} />
         <Route path="/incidencias" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <IssuesPage />} />

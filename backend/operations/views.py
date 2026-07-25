@@ -23,7 +23,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 
 from .models import Address, ApplicationSettings, AuditEvent, Client, DataIssue, Payment, PaymentMethod, PushSubscription, Service, ServiceEvent, ServicePhoto, SyncConflict, TechnicianProfile, User, normalize_digits
-from .permissions import CanManageBilling, CanManageUsers, CanViewBilling, GROUP_SUPERADMIN, ReadModelPermission, RolePermission, can_operate_service, is_technician, scoped_services
+from .permissions import CanManageBilling, CanManageUsers, CanViewBilling, GROUP_SUPERADMIN, ReadModelPermission, RolePermission, assigned_services, can_operate_service, is_restricted_technician, scoped_services
 from .realtime import publish_service_change
 from .serializers import (
     AddressSerializer,
@@ -85,7 +85,7 @@ def _check_client_identity_uniqueness(serializer, instance=None):
 def _ensure_photo_access(user, service):
     if can_operate_service(user, service):
         return
-    if is_technician(user):
+    if is_restricted_technician(user):
         has_offline_conflict = SyncConflict.objects.filter(
             service=service,
             operation__actor=user,
@@ -253,7 +253,7 @@ class ClientViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(filters).distinct()
             if connection.vendor == "postgresql":
                 queryset = queryset.order_by("-similarity", "name")
-        if is_technician(self.request.user):
+        if is_restricted_technician(self.request.user):
             service_ids = scoped_services(self.request.user).values_list("client_id", flat=True)
             queryset = queryset.filter(id__in=service_ids)
         return queryset
@@ -312,7 +312,7 @@ class AddressViewSet(viewsets.ModelViewSet):
         client_id = self.request.query_params.get("client")
         if client_id:
             queryset = queryset.filter(client_id=client_id)
-        if is_technician(self.request.user):
+        if is_restricted_technician(self.request.user):
             client_ids = scoped_services(self.request.user).values_list("client_id", flat=True)
             queryset = queryset.filter(client_id__in=client_ids)
         return queryset
@@ -371,6 +371,17 @@ class TechnicianViewSet(viewsets.ModelViewSet):
 
 class ServiceViewSet(viewsets.ModelViewSet):
     permission_classes = [ReadModelPermission]
+
+    @extend_schema(parameters=[
+        OpenApiParameter(
+            name="assigned_to_me",
+            type=OpenApiTypes.BOOL,
+            description="Limita el resultado a los servicios asignados al perfil técnico de la sesión.",
+        ),
+    ])
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
     def get_serializer_class(self):
         return ServiceDetailSerializer if self.action in ["retrieve", "history"] else ServiceListSerializer
 
@@ -383,6 +394,8 @@ class ServiceViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(archived_at__isnull=True)
         queryset = scoped_services(self.request.user, queryset)
         params = self.request.query_params
+        if params.get("assigned_to_me", "").strip().lower() == "true":
+            queryset = assigned_services(self.request.user, queryset)
         if params.get("client"):
             queryset = queryset.filter(client_id=params["client"])
         if params.get("technician"):
@@ -653,7 +666,7 @@ class DashboardTodayView(APIView):
 
         all_services = scoped_services(request.user, Service.objects.filter(archived_at__isnull=True))
         clients = Client.objects.filter(archived_at__isnull=True)
-        if is_technician(request.user):
+        if is_restricted_technician(request.user):
             clients = clients.filter(pk__in=all_services.values("client_id"))
         service_total = all_services.count()
         completed_total = all_services.filter(status=Service.Status.COMPLETED).count()

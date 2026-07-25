@@ -63,7 +63,7 @@ def test_technician_only_sees_assigned_services():
 
 
 @pytest.mark.django_db
-def test_linked_technician_is_scoped_even_with_administrative_role():
+def test_linked_technician_with_administrative_role_has_both_workspaces():
     user = User.objects.create_user(username="tecnico-administrador", password="una-clave-muy-segura", must_change_password=False)
     user.groups.add(Group.objects.get(name=GROUP_ADMIN))
     profile = TechnicianProfile.objects.create(user=user, display_name="Técnico con rol administrativo", active=True)
@@ -89,21 +89,23 @@ def test_linked_technician_is_scoped_even_with_administrative_role():
 
     session = api.get("/api/v1/auth/session/")
     services = api.get("/api/v1/services/")
+    assigned_services = api.get("/api/v1/services/?assigned_to_me=true")
     calendar = api.get("/api/v1/calendar/events/")
     dashboard = api.get("/api/v1/dashboard/today/")
 
     assert session.status_code == 200
     assert session.data["user"]["is_technician"] is True
-    assert {item["id"] for item in services.data["results"]} == {str(own.id)}
-    assert api.get(f"/api/v1/services/{foreign.id}/").status_code == 404
-    assert api.get(f"/api/v1/clients/{foreign_client.id}/").status_code == 404
-    assert {item["id"] for item in calendar.data} == {str(own.id)}
-    assert {item["id"] for item in dashboard.data["services"]} == {str(own.id)}
-    assert dashboard.data["counts"][Service.Status.ASSIGNED] == 1
+    assert {item["id"] for item in services.data["results"]} == {str(own.id), str(foreign.id)}
+    assert {item["id"] for item in assigned_services.data["results"]} == {str(own.id)}
+    assert api.get(f"/api/v1/services/{foreign.id}/").status_code == 200
+    assert api.get(f"/api/v1/clients/{foreign_client.id}/").status_code == 200
+    assert {item["id"] for item in calendar.data} == {str(own.id), str(foreign.id)}
+    assert {item["id"] for item in dashboard.data["services"]} == {str(own.id), str(foreign.id)}
+    assert dashboard.data["counts"][Service.Status.ASSIGNED] == 2
 
 
 @pytest.mark.django_db
-def test_linked_technician_cannot_reassign_a_foreign_service_with_admin_role():
+def test_linked_technician_can_reassign_a_foreign_service_with_admin_role():
     user = User.objects.create_user(username="tecnico-reasignacion", password="una-clave-muy-segura", must_change_password=False)
     user.groups.add(Group.objects.get(name=GROUP_ADMIN))
     profile = TechnicianProfile.objects.create(user=user, display_name="Técnico solicitante", active=True)
@@ -115,6 +117,6 @@ def test_linked_technician_cannot_reassign_a_foreign_service_with_admin_role():
 
     response = api.post(f"/api/v1/services/{foreign.id}/assign/", {"technician_id": profile.id}, format="json")
 
-    assert response.status_code == 404
+    assert response.status_code == 200
     foreign.refresh_from_db()
-    assert foreign.assigned_technician_id == other_profile.id
+    assert foreign.assigned_technician_id == profile.id
