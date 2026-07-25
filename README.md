@@ -72,6 +72,20 @@ Endpoints de salud: `/api/v1/health/`. WebSocket autenticado: `/ws/operations` (
 - Habilitar el firewall solo para SSH, 80 y 443; Caddy emite y renueva HTTPS.
 - Mantener los volúmenes `postgres_data`, `media_data`, `redis_data`, `static_data` y `caddy_data` fuera del ciclo de reemplazo de contenedores.
 
+### Acceso temporal por IP en devlink
+
+Cuando Traefik ya ocupa los puertos 80 y 443, definir `DEVLINK_SITE_ADDRESS=IP:8443`,
+`DEVLINK_HTTPS_PORT=8443` y agregar `https://IP:8443` a
+`DJANGO_CSRF_TRUSTED_ORIGINS`. Levantar con:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.devlink.yml up -d
+```
+
+Caddy servirá HTTPS en el puerto alternativo con su CA interna. El navegador debe
+aceptar el certificado antes del primer ingreso. Esta modalidad es transitoria;
+para producción pública se debe usar un dominio con certificado confiable.
+
 Backup externo, una vez configurado el repositorio S3-compatible:
 
 ```powershell
