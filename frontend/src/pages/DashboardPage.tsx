@@ -12,8 +12,8 @@ const statusColors: Record<ServiceStatus, string> = {
 };
 
 export function DashboardPage() {
-  const [preset, setPreset] = useState<DashboardRangePreset>("month");
-  const [range, setRange] = useState(() => dashboardPresetRange("month"));
+  const [preset, setPreset] = useState<DashboardRangePreset>("year");
+  const [range, setRange] = useState(() => dashboardPresetRange("year"));
   const validRange = range.start <= range.end;
   const dashboard = useQuery({
     queryKey: ["dashboard", range.start, range.end],
