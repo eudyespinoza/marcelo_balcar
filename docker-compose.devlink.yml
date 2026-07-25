@@ -1,7 +1,23 @@
 services:
   proxy:
     environment:
-      DOMAIN: "${DEVLINK_SITE_ADDRESS:?Defina DEVLINK_SITE_ADDRESS, por ejemplo 203.0.113.10:8443}"
-    ports: !override
-      - "${DEVLINK_HTTPS_PORT:-8443}:${DEVLINK_HTTPS_PORT:-8443}"
-      - "${DEVLINK_HTTPS_PORT:-8443}:${DEVLINK_HTTPS_PORT:-8443}/udp"
+      DOMAIN: ":8080"
+    ports: !reset []
+    volumes:
+      - ./infra/Caddyfile.devlink:/etc/caddy/Caddyfile:ro
+    networks:
+      - default
+      - traefik_proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "traefik_proxy"
+      traefik.http.routers.marcelo-balcar-ip.entrypoints: "websecure"
+      traefik.http.routers.marcelo-balcar-ip.priority: "2000"
+      traefik.http.routers.marcelo-balcar-ip.rule: "Host(`${DEVLINK_IP_ADDRESS:?Defina DEVLINK_IP_ADDRESS}`)"
+      traefik.http.routers.marcelo-balcar-ip.service: "marcelo-balcar-ip"
+      traefik.http.routers.marcelo-balcar-ip.tls: "true"
+      traefik.http.services.marcelo-balcar-ip.loadbalancer.server.port: "8080"
+
+networks:
+  traefik_proxy:
+    external: true

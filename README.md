@@ -74,17 +74,17 @@ Endpoints de salud: `/api/v1/health/`. WebSocket autenticado: `/ws/operations` (
 
 ### Acceso temporal por IP en devlink
 
-Cuando Traefik ya ocupa los puertos 80 y 443, definir `DEVLINK_SITE_ADDRESS=IP:8443`,
-`DEVLINK_HTTPS_PORT=8443` y agregar `https://IP:8443` a
-`DJANGO_CSRF_TRUSTED_ORIGINS`. Levantar con:
+Cuando Traefik ya ocupa los puertos 80 y 443, definir `DEVLINK_IP_ADDRESS=IP` y
+agregar `https://IP` a `DJANGO_CSRF_TRUSTED_ORIGINS`. Levantar con:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.devlink.yml up -d
 ```
 
-Caddy servirá HTTPS en el puerto alternativo con su CA interna. El navegador debe
-aceptar el certificado antes del primer ingreso. Esta modalidad es transitoria;
-para producción pública se debe usar un dominio con certificado confiable.
+Traefik terminará HTTPS en el puerto 443 y enviará el tráfico al Caddy interno.
+El navegador debe aceptar el certificado por defecto antes del primer ingreso.
+Esta modalidad es transitoria; para producción pública se debe usar un dominio con
+certificado confiable.
 
 Backup externo, una vez configurado el repositorio S3-compatible:
 
