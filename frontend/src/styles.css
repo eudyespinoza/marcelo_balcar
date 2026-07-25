@@ -102,6 +102,12 @@ fieldset { padding: 14px; border: 1px solid var(--line); } legend { padding: 0 7
 .login-identity > div { position: relative; z-index: 1; }.login-identity h1 { max-width: 690px; font-size: clamp(3.4rem, 6.4vw, 7.2rem); line-height: .82; }.login-identity h1 em { color: var(--orange); font-style: normal; }.login-identity h1 + p { max-width: 510px; margin-top: 28px; color: #b6bcb7; line-height: 1.65; }
 .login-signals { display: flex; gap: 24px; color: #afb6b0; font-size: .72rem; }.login-signals span { display: flex; align-items: center; gap: 8px; }.login-signals svg { width: 17px; color: var(--orange); }
 .login-form-wrap { display: grid; place-items: center; padding: 40px; }.login-form { width: min(390px, 100%); }.login-icon { display: grid; width: 48px; height: 48px; place-items: center; margin-bottom: 30px; background: #fff0e7; color: var(--orange-dark); border: 1px solid #ffd3bd; }.login-form h2 { margin-bottom: 8px; font-size: 2.5rem; }.login-form > .muted { margin-bottom: 30px; line-height: 1.5; }.login-form label { margin-top: 16px; }.login-form .button { width: 100%; margin-top: 22px; }.login-form > small { display: block; margin-top: 18px; color: #92968f; font-size: .62rem; line-height: 1.5; text-align: center; }
+.login-page-simple { grid-template-columns: 1fr; background: var(--graphite); }
+.login-page-simple .login-form-wrap { min-height: 100vh; }
+.login-page-simple .login-form { padding: 36px; background: var(--paper); border: 1px solid #454a46; box-shadow: 0 24px 70px rgba(0,0,0,.28); }
+.login-page-simple .login-form-brand { display: flex; justify-content: center; margin-bottom: 30px; }
+.login-page-simple .login-form-brand .brand-logo { height: 82px; }
+.login-page-simple .login-form h2 { margin: 0 0 24px; font-size: 2rem; text-align: center; }
 
 .live-indicator { display: flex; align-items: center; gap: 8px; padding-top: 10px; color: var(--green); font-size: .72rem; font-weight: 600; }.live-indicator span { width: 8px; height: 8px; background: #1b9a6e; border-radius: 50%; box-shadow: 0 0 0 5px rgba(27,154,110,.1); animation: pulse 2s infinite; } @keyframes pulse { 50% { box-shadow: 0 0 0 9px rgba(27,154,110,0); } }
 .metric-rail { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 28px; background: var(--graphite); color: #fff; border: 1px solid #111; box-shadow: var(--shadow); }
