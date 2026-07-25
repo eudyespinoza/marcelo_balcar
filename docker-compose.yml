@@ -1,0 +1,107 @@
+name: marcelo-balcar
+
+x-backend: &backend
+  build:
+    context: ./backend
+  env_file: .env
+  volumes:
+    - media_data:/app/media
+    - static_data:/app/staticfiles
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:17-alpine
+    env_file: .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  web:
+    <<: *backend
+    environment:
+      RUN_STARTUP_TASKS: "true"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/api/v1/health/"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+
+  worker:
+    <<: *backend
+    command: ["celery", "-A", "config", "worker", "--loglevel=INFO", "--concurrency=2"]
+
+  proxy:
+    build:
+      context: .
+      dockerfile: infra/Caddy.Dockerfile
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - static_data:/srv/static:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  backup:
+    build:
+      context: .
+      dockerfile: infra/backup/Dockerfile
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      RESTIC_REPOSITORY: ${BACKUP_REPOSITORY}
+      RESTIC_PASSWORD: ${BACKUP_PASSWORD}
+    volumes:
+      - media_data:/media:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["backup"]
+
+  importer:
+    <<: *backend
+    profiles: ["migration"]
+    volumes:
+      - media_data:/app/media
+      - ./Data:/legacy:ro
+      - ./var/reports:/app/reports
+    command: ["python", "manage.py", "import_legacy", "--source", "/legacy", "--mode", "precutover", "--report-dir", "/app/reports"]
+    restart: "no"
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_data:
+  static_data:
+  caddy_data:
+  caddy_config:

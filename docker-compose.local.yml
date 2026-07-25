@@ -1,0 +1,23 @@
+services:
+  web:
+    environment:
+      RUN_STARTUP_TASKS: "true"
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
+      DJANGO_CSRF_TRUSTED_ORIGINS: "http://localhost:8088,http://127.0.0.1:8088"
+
+  proxy-local:
+    image: marcelo-balcar-proxy-local:latest
+    build:
+      context: .
+      dockerfile: infra/Caddy.Dockerfile
+    environment:
+      DOMAIN: ":8088"
+    ports:
+      - "127.0.0.1:8088:8088"
+    volumes:
+      - static_data:/srv/static:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
