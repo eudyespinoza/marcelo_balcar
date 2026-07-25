@@ -88,9 +88,10 @@ Para reconstruir y reiniciar todo el proyecto en ese servidor:
 ```
 
 Traefik terminará HTTPS en el puerto 443 y enviará el tráfico al Caddy interno.
-El navegador debe aceptar el certificado por defecto antes del primer ingreso.
-Esta modalidad es transitoria; para producción pública se debe usar un dominio con
-certificado confiable.
+La instalación actual usa un certificado de IP de Let’s Encrypt con el perfil
+`shortlived`; el almacenamiento ACME persistente del Traefik compartido permite
+su renovación automática. Un dominio continúa siendo recomendable para disponer
+de una dirección estable e independiente de la IP.
 
 Backup externo, una vez configurado el repositorio S3-compatible:
 
