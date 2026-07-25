@@ -413,6 +413,7 @@ class SessionSerializer(serializers.Serializer):
 
 class DashboardSerializer(serializers.Serializer):
     date = serializers.DateField()
+    range = serializers.DictField()
     counts = serializers.DictField(child=serializers.IntegerField())
     services = ServiceListSerializer(many=True)
     overview = serializers.DictField()

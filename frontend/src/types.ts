@@ -113,6 +113,7 @@ export interface Service {
 
 export interface DashboardData {
   date: string;
+  range: { start: string; end: string; granularity: "day" | "month" };
   counts: Record<ServiceStatus | "UNASSIGNED" | "REVIEW", number>;
   services: Service[];
   overview: {
@@ -134,7 +135,7 @@ export interface DashboardData {
     collected_this_month: string;
   };
   service_trend: Array<{ date: string; scheduled: number; completed: number; cancelled: number }>;
-  revenue_trend: Array<{ month: string; collected: string }>;
+  revenue_trend: Array<{ date: string; collected: string }>;
   status_breakdown: Array<{ status: ServiceStatus; label: string; count: number }>;
   technician_workload: Array<{ id: string; name: string; total: number; completed: number; open: number }>;
   payment_methods: Array<{ name: string; total: string; count: number }>;

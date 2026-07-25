@@ -290,3 +290,34 @@ def test_dashboard_exposes_customer_service_and_financial_analytics():
     assert response.data["technician_workload"][0]["name"] == "Técnico tablero"
     assert response.data["technician_workload"][0]["total"] == 2
     assert response.data["payment_methods"] == [{"name": "Efectivo", "total": "900.00", "count": 2}]
+
+
+@pytest.mark.django_db
+def test_dashboard_counts_migrated_completion_by_completion_date_in_selected_range():
+    user = User.objects.create_superuser(username="dashboard-migrated", password="Clave-segura-2026", must_change_password=False)
+    customer = Client.objects.create(name="Cliente migrado", phone="3435000040")
+    completed_at = timezone.now() - timedelta(days=180)
+    Service.objects.create(
+        client=customer,
+        description="Servicio culminado migrado",
+        scheduled_at=None,
+        completed_at=completed_at,
+        status=Service.Status.COMPLETED,
+        legacy_id="legacy-completed-1",
+    )
+    start_date = timezone.localdate(completed_at) - timedelta(days=1)
+    end_date = timezone.localdate(completed_at) + timedelta(days=1)
+
+    response = authenticated(user).get(
+        f"/api/v1/dashboard/today/?start_date={start_date.isoformat()}&end_date={end_date.isoformat()}"
+    )
+
+    assert response.status_code == 200
+    assert response.data["range"] == {
+        "start": start_date.isoformat(),
+        "end": end_date.isoformat(),
+        "granularity": "day",
+    }
+    assert sum(item["completed"] for item in response.data["service_trend"]) == 1
+    status_counts = {item["status"]: item["count"] for item in response.data["status_breakdown"]}
+    assert status_counts[Service.Status.COMPLETED] == 1

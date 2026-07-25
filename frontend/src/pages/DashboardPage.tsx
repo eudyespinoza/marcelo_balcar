@@ -1,7 +1,8 @@
-import type { ComponentType } from "react";
+import { useState, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CircleDollarSign, Receipt, TrendingUp, UserCog, Users, Wallet, Wrench } from "lucide-react";
 import { api } from "../lib/api";
+import { dashboardPresetRange, type DashboardRangePreset } from "../lib/dashboardRange";
 import { currency, TZ } from "../lib/format";
 import type { DashboardData, ServiceStatus } from "../types";
 import { BarRanking, TrendChart, type BarDatum } from "../components/DashboardCharts";
@@ -11,18 +12,35 @@ const statusColors: Record<ServiceStatus, string> = {
 };
 
 export function DashboardPage() {
-  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: () => api<DashboardData>("/dashboard/today/"), refetchInterval: 60_000 });
+  const [preset, setPreset] = useState<DashboardRangePreset>("month");
+  const [range, setRange] = useState(() => dashboardPresetRange("month"));
+  const validRange = range.start <= range.end;
+  const dashboard = useQuery({
+    queryKey: ["dashboard", range.start, range.end],
+    queryFn: () => api<DashboardData>(`/dashboard/today/?start_date=${range.start}&end_date=${range.end}`),
+    enabled: validRange,
+    placeholderData: (previous) => previous,
+    refetchInterval: 60_000
+  });
   const now = new Date();
   const data = dashboard.data;
   const delinquencyRate = data?.overview.clients_total ? data.overview.delinquent_clients / data.overview.clients_total * 100 : 0;
-  const serviceTrend = data?.service_trend.map((item) => ({ label: shortDate(item.date), values: { scheduled: item.scheduled, completed: item.completed, cancelled: item.cancelled } })) ?? [];
-  const revenueTrend = data?.revenue_trend.map((item) => ({ label: shortMonth(item.month), values: { collected: Number(item.collected) } })) ?? [];
+  const serviceTrend = data?.service_trend.map((item) => ({ label: periodLabel(item.date, data.range.granularity), values: { scheduled: item.scheduled, completed: item.completed, cancelled: item.cancelled } })) ?? [];
+  const revenueTrend = data?.revenue_trend.map((item) => ({ label: periodLabel(item.date, data.range.granularity), values: { collected: Number(item.collected) } })) ?? [];
   const statusData: BarDatum[] = data?.status_breakdown.map((item) => ({ label: item.label, value: item.count, color: statusColors[item.status] })) ?? [];
   const workloadData: BarDatum[] = data?.technician_workload.map((item) => ({ label: item.name, value: item.total, meta: `${item.open} abiertos · ${item.completed} finalizados`, color: "#245f89" })) ?? [];
   const paymentData: BarDatum[] = data?.payment_methods.map((item) => ({ label: item.name, value: Number(item.total), displayValue: currency(item.total), meta: `${item.count} movimientos`, color: "#167455" })) ?? [];
+  const selectPreset = (next: Exclude<DashboardRangePreset, "custom">) => { setPreset(next); setRange(dashboardPresetRange(next)); };
+  const rangeDetail = data ? `${displayDate(data.range.start)} al ${displayDate(data.range.end)}` : "";
 
   return <div className="page dashboard-page">
     <header className="page-header"><div><p className="eyebrow">PANEL GENERAL</p><h1>Resumen del negocio</h1><p>{new Intl.DateTimeFormat("es-AR", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" }).format(now)}</p></div><div className="live-indicator"><span /> Actualización en vivo</div></header>
+
+    <section className="dashboard-range-filter" aria-label="Período de los gráficos">
+      <div className="dashboard-range-presets"><button type="button" className={preset === "week" ? "active" : ""} onClick={() => selectPreset("week")}>Última semana</button><button type="button" className={preset === "month" ? "active" : ""} onClick={() => selectPreset("month")}>Último mes</button><button type="button" className={preset === "year" ? "active" : ""} onClick={() => selectPreset("year")}>Último año</button></div>
+      <div className="dashboard-range-dates"><label>Desde<input type="date" value={range.start} onChange={(event) => { setPreset("custom"); setRange((current) => ({ ...current, start: event.target.value })); }} /></label><label>Hasta<input type="date" value={range.end} onChange={(event) => { setPreset("custom"); setRange((current) => ({ ...current, end: event.target.value })); }} /></label></div>
+    </section>
+    {!validRange && <div className="inline-alert danger">La fecha desde no puede ser posterior a la fecha hasta.</div>}
 
     {dashboard.isPending && <div className="dashboard-skeleton" aria-label="Cargando indicadores"><i /><i /><i /><i /><i /><i /></div>}
     {dashboard.isError && <div className="inline-alert danger">No se pudo cargar el tablero. Verificá la conexión y tus permisos.</div>}
@@ -42,17 +60,17 @@ export function DashboardPage() {
       </section>
 
       <section className="dashboard-insights">
-        <article className="insight-card insight-wide"><InsightHeader eyebrow="SERVICIOS POR DÍA" title="Volumen de los últimos 14 días" detail="Programados, finalizados y cancelados" /><TrendChart ariaLabel="Servicios programados, finalizados y cancelados por día durante los últimos 14 días" data={serviceTrend} series={[
+        <article className="insight-card insight-wide"><InsightHeader eyebrow="SERVICIOS" title={data.range.granularity === "month" ? "Servicios por mes" : "Servicios por día"} detail={rangeDetail} /><TrendChart ariaLabel="Servicios programados, finalizados y cancelados en el período seleccionado" data={serviceTrend} series={[
           { key: "scheduled", label: "Programados", color: "#245f89" },
           { key: "completed", label: "Finalizados", color: "#167455" },
           { key: "cancelled", label: "Cancelados", color: "#a44b43", dashed: true },
         ]} /></article>
-        <article className="insight-card"><InsightHeader eyebrow="ESTADO GLOBAL" title="Distribución de servicios" detail={`${data.overview.unassigned_services} sin asignar · ${data.overview.unscheduled_services} sin fecha`} /><BarRanking ariaLabel="Cantidad total de servicios por estado" data={statusData} /></article>
+        <article className="insight-card"><InsightHeader eyebrow="ESTADOS" title="Distribución de servicios" detail={rangeDetail} /><BarRanking ariaLabel="Cantidad de servicios por estado en el período seleccionado" data={statusData} /></article>
 
-        {data.finance && <article className="insight-card insight-wide"><InsightHeader eyebrow="INGRESOS" title="Cobranza de los últimos 6 meses" detail={`Tasa de cobranza ${data.finance.collection_rate.toFixed(1)}%`} /><TrendChart ariaLabel="Importe cobrado por mes durante los últimos 6 meses" data={revenueTrend} series={[{ key: "collected", label: "Cobrado", color: "#167455", format: currency }]} /></article>}
-        {data.finance && <article className="insight-card"><InsightHeader eyebrow="COBRANZA" title="Medios de pago" detail="Totales acumulados vigentes" /><BarRanking ariaLabel="Importe cobrado por medio de pago" data={paymentData} /></article>}
+        {data.finance && <article className="insight-card insight-wide"><InsightHeader eyebrow="INGRESOS" title={data.range.granularity === "month" ? "Cobranza por mes" : "Cobranza por día"} detail={rangeDetail} /><TrendChart ariaLabel="Importe cobrado en el período seleccionado" data={revenueTrend} series={[{ key: "collected", label: "Cobrado", color: "#167455", format: currency }]} /></article>}
+        {data.finance && <article className="insight-card"><InsightHeader eyebrow="COBRANZA" title="Medios de pago" detail={rangeDetail} /><BarRanking ariaLabel="Importe cobrado por medio de pago en el período seleccionado" data={paymentData} /></article>}
 
-        <article className="insight-card insight-full"><InsightHeader eyebrow="EQUIPO" title="Carga por técnico" detail="Servicios abiertos y finalizados por responsable" /><BarRanking ariaLabel="Cantidad de servicios por técnico" data={workloadData} /></article>
+        <article className="insight-card insight-full"><InsightHeader eyebrow="EQUIPO" title="Carga por técnico" detail={rangeDetail} /><BarRanking ariaLabel="Cantidad de servicios por técnico en el período seleccionado" data={workloadData} /></article>
       </section>
 
     </>}
@@ -67,10 +85,10 @@ function InsightHeader({ eyebrow, title, detail }: { eyebrow: string; title: str
   return <header className="insight-header"><div><p>{eyebrow}</p><h2>{title}</h2></div><span>{detail}</span></header>;
 }
 
-function shortDate(value: string) {
-  return new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`)).replace(".", "");
+function periodLabel(value: string, granularity: "day" | "month") {
+  return new Intl.DateTimeFormat("es-AR", granularity === "month" ? { month: "short", year: "2-digit", timeZone: "UTC" } : { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`)).replace(".", "");
 }
 
-function shortMonth(value: string) {
-  return new Intl.DateTimeFormat("es-AR", { month: "short", year: "2-digit", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`)).replace(".", "");
+function displayDate(value: string) {
+  return new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00Z`));
 }

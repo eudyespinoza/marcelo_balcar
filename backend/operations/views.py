@@ -14,9 +14,11 @@ from django.db.models.functions import Coalesce, TruncDate, TruncMonth
 from django.http import FileResponse, Http404, HttpResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.types import OpenApiTypes
@@ -130,6 +132,22 @@ def _shift_month(value: date, months: int) -> date:
 
 def _money(value) -> str:
     return f"{Decimal(value or 0):.2f}"
+
+
+def _dashboard_periods(start_date: date, end_date: date, granularity: str):
+    if granularity == "month":
+        current = start_date.replace(day=1)
+        last = end_date.replace(day=1)
+        while current <= last:
+            yield current
+            current = _shift_month(current, 1)
+        return
+    for offset in range((end_date - start_date).days + 1):
+        yield start_date + timedelta(days=offset)
+
+
+def _period_date(value):
+    return value.date() if isinstance(value, datetime) else value
 
 
 @extend_schema(responses=CsrfSerializer)
@@ -652,6 +670,15 @@ class DashboardTodayView(APIView):
     def get(self, request):
         _require_perm(request.user, "operations.view_dashboard")
         today = timezone.localdate()
+        range_end_date = parse_date(request.query_params.get("end_date", "")) or today
+        range_start_date = parse_date(request.query_params.get("start_date", "")) or (range_end_date - timedelta(days=29))
+        if range_start_date > range_end_date:
+            raise ValidationError({"detail": "La fecha desde no puede ser posterior a la fecha hasta."})
+        if (range_end_date - range_start_date).days > 3660:
+            raise ValidationError({"detail": "El rango máximo permitido es de 10 años."})
+        range_start = timezone.make_aware(datetime.combine(range_start_date, time.min))
+        range_end = timezone.make_aware(datetime.combine(range_end_date + timedelta(days=1), time.min))
+        granularity = "month" if (range_end_date - range_start_date).days > 62 else "day"
         start = timezone.make_aware(datetime.combine(today, time.min))
         end = start + timedelta(days=1)
         services = scoped_services(
@@ -682,37 +709,48 @@ class DashboardTodayView(APIView):
             "completion_rate": round(completed_total / completion_base * 100, 1) if completion_base else 0.0,
         }
 
-        status_counts = dict(all_services.values_list("status").annotate(total=Count("id")))
+        activity_filter = (
+            Q(status=Service.Status.COMPLETED, completed_at__gte=range_start, completed_at__lt=range_end)
+            | Q(status=Service.Status.COMPLETED, completed_at__isnull=True, scheduled_at__gte=range_start, scheduled_at__lt=range_end)
+            | (~Q(status=Service.Status.COMPLETED) & Q(scheduled_at__gte=range_start, scheduled_at__lt=range_end))
+        )
+        range_services = all_services.filter(activity_filter)
+        status_counts = dict(range_services.values_list("status").annotate(total=Count("id")))
         status_breakdown = [
             {"status": value, "label": label, "count": status_counts.get(value, 0)}
             for value, label in Service.Status.choices
         ]
 
-        trend_start = start - timedelta(days=13)
-        daily_rows = {
-            item["day"]: item
-            for item in all_services.filter(scheduled_at__gte=trend_start, scheduled_at__lt=end)
-            .annotate(day=TruncDate("scheduled_at", tzinfo=timezone.get_current_timezone()))
-            .values("day")
+        period_function = TruncMonth if granularity == "month" else TruncDate
+        scheduled_rows = {
+            _period_date(item["period"]): item
+            for item in all_services.filter(scheduled_at__gte=range_start, scheduled_at__lt=range_end)
+            .annotate(period=period_function("scheduled_at", tzinfo=timezone.get_current_timezone()))
+            .values("period")
             .annotate(
                 scheduled=Count("id"),
-                completed=Count("id", filter=Q(status=Service.Status.COMPLETED)),
                 cancelled=Count("id", filter=Q(status=Service.Status.CANCELLED)),
             )
         }
-        service_trend = []
-        for offset in range(14):
-            day = today - timedelta(days=13 - offset)
-            row = daily_rows.get(day, {})
-            service_trend.append({
-                "date": day.isoformat(),
-                "scheduled": row.get("scheduled", 0),
-                "completed": row.get("completed", 0),
-                "cancelled": row.get("cancelled", 0),
-            })
+        completed_rows = {
+            _period_date(item["period"]): item["completed"]
+            for item in all_services.filter(status=Service.Status.COMPLETED, completed_at__gte=range_start, completed_at__lt=range_end)
+            .annotate(period=period_function("completed_at", tzinfo=timezone.get_current_timezone()))
+            .values("period")
+            .annotate(completed=Count("id"))
+        }
+        service_trend = [
+            {
+                "date": period.isoformat(),
+                "scheduled": scheduled_rows.get(period, {}).get("scheduled", 0),
+                "completed": completed_rows.get(period, 0),
+                "cancelled": scheduled_rows.get(period, {}).get("cancelled", 0),
+            }
+            for period in _dashboard_periods(range_start_date, range_end_date, granularity)
+        ]
 
         workload_rows = (
-            all_services.filter(assigned_technician__isnull=False)
+            range_services.filter(assigned_technician__isnull=False)
             .values("assigned_technician_id", "assigned_technician__display_name")
             .annotate(
                 total=Count("id"),
@@ -758,28 +796,32 @@ class DashboardTodayView(APIView):
                 "collected_this_month": _money(collected_this_month),
             }
 
-            first_month = _shift_month(current_month, -5)
-            first_month_at = timezone.make_aware(datetime.combine(first_month, time.min))
-            monthly_rows = {
-                item["month"].date().replace(day=1): item["total"]
-                for item in valid_payments.filter(paid_at__gte=first_month_at)
-                .annotate(month=TruncMonth("paid_at", tzinfo=timezone.get_current_timezone()))
-                .values("month")
+            range_payments = valid_payments.filter(paid_at__gte=range_start, paid_at__lt=range_end)
+            payment_rows = {
+                _period_date(item["period"]): item["total"]
+                for item in range_payments
+                .annotate(period=period_function("paid_at", tzinfo=timezone.get_current_timezone()))
+                .values("period")
                 .annotate(total=Sum("amount"))
             }
             revenue_trend = [
-                {"month": month.isoformat(), "collected": _money(monthly_rows.get(month))}
-                for month in (_shift_month(first_month, offset) for offset in range(6))
+                {"date": period.isoformat(), "collected": _money(payment_rows.get(period))}
+                for period in _dashboard_periods(range_start_date, range_end_date, granularity)
             ]
             payment_methods = [
                 {"name": item["method__name"], "total": _money(item["total"]), "count": item["count"]}
-                for item in valid_payments.values("method__name")
+                for item in range_payments.values("method__name")
                 .annotate(total=Sum("amount"), count=Count("id"))
                 .order_by("-total", "method__name")
             ]
 
         return Response({
             "date": today,
+            "range": {
+                "start": range_start_date.isoformat(),
+                "end": range_end_date.isoformat(),
+                "granularity": granularity,
+            },
             "counts": counts,
             "services": ServiceListSerializer(services, many=True, context={"request": request}).data,
             "overview": overview,
