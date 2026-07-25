@@ -10,6 +10,23 @@ export class ApiError extends Error {
   }
 }
 
+function firstValidationMessage(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) { const message = firstValidationMessage(item); if (message) return message; }
+  }
+  if (typeof value === "object" && value) {
+    for (const item of Object.values(value)) { const message = firstValidationMessage(item); if (message) return message; }
+  }
+  return null;
+}
+
+export function apiErrorMessage(data: unknown, fallback = "No se pudo completar la operación.") {
+  if (typeof data === "object" && data && "overlap" in data) return "El técnico ya tiene un servicio en ese horario.";
+  if (typeof data === "object" && data && "detail" in data) return firstValidationMessage((data as { detail: unknown }).detail) ?? fallback;
+  return firstValidationMessage(data) ?? fallback;
+}
+
 export async function ensureCsrf() {
   if (!cookie("csrftoken")) await fetch(`${API_ROOT}/auth/csrf/`, { credentials: "include" });
 }
@@ -27,11 +44,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const contentType = response.headers.get("content-type") ?? "";
   const data = contentType.includes("json") ? await response.json() : await response.text();
   if (!response.ok) {
-    const detail = typeof data === "object" && data && "detail" in data
-      ? String((data as { detail: unknown }).detail)
-      : typeof data === "object" && data && "overlap" in data
-        ? "El técnico ya tiene un servicio en ese horario."
-        : "No se pudo completar la operación.";
+    const detail = apiErrorMessage(data);
     throw new ApiError(response.status, data, detail);
   }
   return data as T;
