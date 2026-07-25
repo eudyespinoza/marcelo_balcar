@@ -81,6 +81,12 @@ agregar `https://IP` a `DJANGO_CSRF_TRUSTED_ORIGINS`. Levantar con:
 docker compose -f docker-compose.yml -f docker-compose.devlink.yml up -d
 ```
 
+Para reconstruir y reiniciar todo el proyecto en ese servidor:
+
+```bash
+./reiniciar-devlink.sh
+```
+
 Traefik terminará HTTPS en el puerto 443 y enviará el tráfico al Caddy interno.
 El navegador debe aceptar el certificado por defecto antes del primer ingreso.
 Esta modalidad es transitoria; para producción pública se debe usar un dominio con
