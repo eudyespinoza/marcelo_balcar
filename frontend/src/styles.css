@@ -233,7 +233,7 @@ h1, h2, h3, h4, .page-header p, .client-profile-contact > span, .address-list st
   .modal > header h2 { font-size: clamp(1rem,6vw,1.4rem); line-height: 1.05; }
   .tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); padding-inline: 12px; }
   .tabs button { min-width: 0; padding-inline: 5px; }
-  .section-tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .section-tabs { display: grid; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0,1fr); }
   .section-tabs button { min-width: 0; justify-content: center; gap: 5px; padding-inline: 5px; }
   .dashboard-kpi.kpi-money strong.value-lg { font-size: clamp(.72rem,7.2cqi,1.25rem); }
   .dashboard-kpi.kpi-money strong.value-xl { font-size: clamp(.72rem,5.8cqi,1.05rem); }
