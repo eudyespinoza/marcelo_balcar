@@ -6,6 +6,7 @@ import { dashboardPresetRange, type DashboardRangePreset } from "../lib/dashboar
 import { currency, TZ } from "../lib/format";
 import type { DashboardData, ServiceStatus } from "../types";
 import { BarRanking, TrendChart, type BarDatum } from "../components/DashboardCharts";
+import { MoneyValue } from "../components/MoneyValue";
 
 const statusColors: Record<ServiceStatus, string> = {
   PENDING: "#777268", ASSIGNED: "#3977a2", IN_PROGRESS: "#e45a18", COMPLETED: "#288067", CANCELLED: "#a44b43"
@@ -78,7 +79,7 @@ export function DashboardPage() {
 }
 
 export function KpiCard({ icon: Icon, label, value, hint, tone = "default", money = false }: { icon: ComponentType; label: string; value: string; hint: string; tone?: "default" | "danger" | "success" | "warning" | "dark"; money?: boolean }) {
-  return <article className={`dashboard-kpi kpi-${tone}${money ? " kpi-money" : ""}`}><span><Icon /></span><div><small>{label}</small><strong title={money ? value : undefined}>{value}</strong><p>{hint}</p></div></article>;
+  return <article className={`dashboard-kpi kpi-${tone}${money ? " kpi-money" : ""}`}><span><Icon /></span><div><small>{label}</small>{money ? <MoneyValue as="strong" value={value} /> : <strong>{value}</strong>}<p>{hint}</p></div></article>;
 }
 
 function InsightHeader({ eyebrow, title, detail }: { eyebrow: string; title: string; detail: string }) {

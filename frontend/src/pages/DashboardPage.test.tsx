@@ -8,6 +8,7 @@ describe("KpiCard", () => {
     const markup = renderToStaticMarkup(<KpiCard icon={() => <svg />} label="Total facturado" value={value} hint="Servicios con importe" money />);
 
     expect(markup).toContain("kpi-money");
+    expect(markup).toContain("value-xl");
     expect(markup).toContain(value);
     expect(markup).toContain(`title="${value}"`);
   });

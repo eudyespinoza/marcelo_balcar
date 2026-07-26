@@ -1,3 +1,5 @@
+import { MoneyValue } from "./MoneyValue";
+
 export interface TrendDatum {
   label: string;
   values: Record<string, number>;
@@ -20,6 +22,13 @@ export function linePoints(data: TrendDatum[], key: string, width: number, heigh
   });
 }
 
+export function compactAxisNumber(value: number) {
+  const absolute = Math.abs(value);
+  const divisor = absolute >= 1_000_000_000 ? 1_000_000_000 : absolute >= 1_000_000 ? 1_000_000 : absolute >= 1000 ? 1000 : 1;
+  const suffix = divisor === 1_000_000_000 ? " B" : divisor === 1_000_000 ? " M" : divisor === 1000 ? " k" : "";
+  return `${new Intl.NumberFormat("es-AR", { maximumFractionDigits: divisor === 1 ? 0 : 1 }).format(value / divisor)}${suffix}`;
+}
+
 export function TrendChart({ data, series, ariaLabel }: { data: TrendDatum[]; series: TrendSeries[]; ariaLabel: string }) {
   const width = 760;
   const height = 220;
@@ -30,7 +39,7 @@ export function TrendChart({ data, series, ariaLabel }: { data: TrendDatum[]; se
     <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel}>
       {[0, 1, 2, 3, 4].map((tick) => {
         const y = chart.top + chart.height - tick / 4 * chart.height;
-        return <g key={tick}><line className="chart-gridline" x1={chart.left} x2={chart.left + chart.width} y1={y} y2={y} /><text className="chart-axis-label" x={chart.left - 9} y={y + 4} textAnchor="end">{Math.round(maximum * tick / 4)}</text></g>;
+        return <g key={tick}><line className="chart-gridline" x1={chart.left} x2={chart.left + chart.width} y1={y} y2={y} /><text className="chart-axis-label" x={chart.left - 9} y={y + 4} textAnchor="end">{compactAxisNumber(maximum * tick / 4)}</text></g>;
       })}
       {data.map((item, index) => {
         if (index % labelStep && index !== data.length - 1) return null;
@@ -62,9 +71,9 @@ export interface BarDatum {
 export function BarRanking({ data, ariaLabel }: { data: BarDatum[]; ariaLabel: string }) {
   const maximum = Math.max(1, ...data.map((item) => item.value));
   if (!data.length) return <p className="chart-empty">Todavía no hay datos suficientes.</p>;
-  return <div className="bar-ranking" role="img" aria-label={ariaLabel}>{data.map((item) => <div className="dashboard-bar-row" key={item.label}>
+  return <div className="bar-ranking" role="img" aria-label={ariaLabel}>{data.map((item) => <div className={`dashboard-bar-row${item.displayValue ? " has-display-value" : ""}`} key={item.label}>
     <div><strong>{item.label}</strong>{item.meta && <small>{item.meta}</small>}</div>
     <div className="dashboard-bar-track"><i style={{ width: `${item.value / maximum * 100}%`, background: item.color }} /></div>
-    <b>{item.displayValue ?? item.value}</b>
+    {item.displayValue ? <MoneyValue as="b" value={item.displayValue} /> : <b>{item.value}</b>}
   </div>)}</div>;
 }
