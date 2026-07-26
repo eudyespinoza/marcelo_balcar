@@ -52,10 +52,10 @@ export function DashboardPage() {
         <KpiCard icon={UserCog} label="Usuarios activos" value={data.overview.active_users.toLocaleString("es-AR")} hint={`${data.overview.active_technicians} técnicos activos`} />
         <KpiCard icon={Wrench} label="Servicios registrados" value={data.overview.services_total.toLocaleString("es-AR")} hint={`${data.overview.completion_rate.toFixed(1)}% finalizados`} />
         {data.finance && <>
-          <KpiCard icon={Receipt} label="Total facturado" value={currency(data.finance.billed_total)} hint="Servicios con importe" tone="dark" />
-          <KpiCard icon={CircleDollarSign} label="Total cobrado" value={currency(data.finance.collected_total)} hint={`${data.finance.collection_rate.toFixed(1)}% recuperado`} tone="success" />
-          <KpiCard icon={Wallet} label="Saldo pendiente" value={currency(data.finance.outstanding_total)} hint={`${currency(data.finance.delinquent_balance)} en clientes morosos`} tone="warning" />
-          <KpiCard icon={TrendingUp} label="Cobrado este mes" value={currency(data.finance.collected_this_month)} hint="Ingresos no anulados" />
+          <KpiCard icon={Receipt} label="Total facturado" value={currency(data.finance.billed_total)} hint="Servicios con importe" tone="dark" money />
+          <KpiCard icon={CircleDollarSign} label="Total cobrado" value={currency(data.finance.collected_total)} hint={`${data.finance.collection_rate.toFixed(1)}% recuperado`} tone="success" money />
+          <KpiCard icon={Wallet} label="Saldo pendiente" value={currency(data.finance.outstanding_total)} hint={`${currency(data.finance.delinquent_balance)} en clientes morosos`} tone="warning" money />
+          <KpiCard icon={TrendingUp} label="Cobrado este mes" value={currency(data.finance.collected_this_month)} hint="Ingresos no anulados" money />
         </>}
       </section>
 
@@ -77,8 +77,8 @@ export function DashboardPage() {
   </div>;
 }
 
-function KpiCard({ icon: Icon, label, value, hint, tone = "default" }: { icon: ComponentType; label: string; value: string; hint: string; tone?: "default" | "danger" | "success" | "warning" | "dark" }) {
-  return <article className={`dashboard-kpi kpi-${tone}`}><span><Icon /></span><div><small>{label}</small><strong>{value}</strong><p>{hint}</p></div></article>;
+export function KpiCard({ icon: Icon, label, value, hint, tone = "default", money = false }: { icon: ComponentType; label: string; value: string; hint: string; tone?: "default" | "danger" | "success" | "warning" | "dark"; money?: boolean }) {
+  return <article className={`dashboard-kpi kpi-${tone}${money ? " kpi-money" : ""}`}><span><Icon /></span><div><small>{label}</small><strong title={money ? value : undefined}>{value}</strong><p>{hint}</p></div></article>;
 }
 
 function InsightHeader({ eyebrow, title, detail }: { eyebrow: string; title: string; detail: string }) {
