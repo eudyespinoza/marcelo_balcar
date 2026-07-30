@@ -233,6 +233,13 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 class CompleteServiceSerializer(serializers.Serializer):
     notes = serializers.CharField(allow_blank=False, trim_whitespace=True)
+    amount_due = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+        allow_null=True,
+    )
     collected_amount = serializers.DecimalField(
         max_digits=12,
         decimal_places=2,

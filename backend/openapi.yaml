@@ -2490,6 +2490,11 @@ components:
       properties:
         notes:
           type: string
+        amount_due:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
         collected_amount:
           type: string
           format: decimal

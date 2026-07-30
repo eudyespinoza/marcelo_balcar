@@ -531,6 +531,7 @@ class ServiceViewSet(viewsets.ModelViewSet):
             pk,
             request.user,
             serializer.validated_data["notes"],
+            amount_due=serializer.validated_data.get("amount_due"),
             collected_amount=serializer.validated_data.get("collected_amount"),
         )
         return Response(ServiceDetailSerializer(service, context={"request": request}).data)

@@ -74,14 +74,13 @@ def test_technician_completion_accepts_collection_without_leaking_billing():
         assigned_technician=profile,
         status=Service.Status.IN_PROGRESS,
         arrival_at=timezone.now(),
-        amount_due=Decimal("1000.00"),
     )
     api = APIClient()
     api.force_login(user)
 
     response = api.post(
         f"/api/v1/services/{service.id}/complete/",
-        {"notes": "Trabajo finalizado.", "collected_amount": "400.00"},
+        {"notes": "Trabajo finalizado.", "amount_due": "1000.00", "collected_amount": "400.00"},
         format="json",
     )
 
@@ -89,6 +88,8 @@ def test_technician_completion_accepts_collection_without_leaking_billing():
     assert response.data["status"] == Service.Status.COMPLETED
     assert "paid_amount" not in response.data
     assert "payments" not in response.data
+    service.refresh_from_db()
+    assert service.amount_due == Decimal("1000.00")
     assert Payment.objects.filter(service=service, amount=Decimal("400.00"), recorded_by=user).exists()
 
 

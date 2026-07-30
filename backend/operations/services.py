@@ -160,7 +160,7 @@ def add_service_note(service_id, actor, note, *, occurred_at=None):
 
 
 @transaction.atomic
-def complete_service(service_id, actor, notes, *, occurred_at=None, collected_amount=None):
+def complete_service(service_id, actor, notes, *, occurred_at=None, amount_due=None, collected_amount=None):
     notes = (notes or "").strip()
     if not notes:
         raise ValidationError("Debe registrar una observación antes de finalizar.")
@@ -171,6 +171,18 @@ def complete_service(service_id, actor, notes, *, occurred_at=None, collected_am
     if service.status != Service.Status.IN_PROGRESS:
         raise ValidationError("Solo un servicio en curso puede finalizarse.")
     completed_at = occurred_at or timezone.now()
+    update_fields = ["completion_notes", "completed_at", "status", "version", "updated_by", "updated_at"]
+    if amount_due not in [None, ""]:
+        try:
+            normalized_total = Decimal(str(amount_due))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValidationError({"amount_due": "Ingresá un importe total válido."}) from exc
+        if normalized_total < 0:
+            raise ValidationError({"amount_due": "El importe no puede ser negativo."})
+        if normalized_total < service.paid_amount:
+            raise ValidationError({"amount_due": "El importe no puede ser menor que lo ya cobrado."})
+        service.amount_due = normalized_total
+        update_fields.append("amount_due")
     payment = None
     if collected_amount not in [None, ""]:
         cash_method = PaymentMethod.objects.filter(code="cash", active=True).first()
@@ -189,7 +201,7 @@ def complete_service(service_id, actor, notes, *, occurred_at=None, collected_am
     service.status = Service.Status.COMPLETED
     service.version += 1
     service.updated_by = actor
-    service.save(update_fields=["completion_notes", "completed_at", "status", "version", "updated_by", "updated_at"])
+    service.save(update_fields=update_fields)
     if payment:
         payment.save()
         _audit(actor, "payment.create", payment, {"service_id": str(service.id), "amount": str(payment.amount)})
@@ -321,6 +333,7 @@ def apply_sync_operation(actor, data):
                 actor,
                 payload.get("notes", ""),
                 occurred_at=occurred_at,
+                amount_due=payload.get("amount_due"),
                 collected_amount=payload.get("collected_amount"),
             )
         else:
