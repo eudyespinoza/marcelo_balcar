@@ -5,7 +5,7 @@ from django.contrib.auth.models import Group
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from operations.models import Address, Client, Service, TechnicianProfile, User
+from operations.models import Address, Client, Payment, Service, TechnicianProfile, User
 from operations.permissions import GROUP_ADMIN, GROUP_TECHNICIAN
 
 
@@ -60,6 +60,36 @@ def test_technician_only_sees_assigned_services():
     ids = {item["id"] for item in response.data["results"]}
     assert ids == {str(own.id)}
     assert api.get(f"/api/v1/services/{foreign.id}/").status_code == 404
+
+
+@pytest.mark.django_db
+def test_technician_completion_accepts_collection_without_leaking_billing():
+    user = User.objects.create_user(username="tecnico-cobro", password="una-clave-muy-segura", must_change_password=False)
+    user.groups.add(Group.objects.get(name=GROUP_TECHNICIAN))
+    profile = TechnicianProfile.objects.create(user=user, display_name="Técnico", active=True)
+    customer = Client.objects.create(name="Cliente", phone="3435550001", normalized_phone="3435550001")
+    service = Service.objects.create(
+        client=customer,
+        description="Servicio con cobro",
+        assigned_technician=profile,
+        status=Service.Status.IN_PROGRESS,
+        arrival_at=timezone.now(),
+        amount_due=Decimal("1000.00"),
+    )
+    api = APIClient()
+    api.force_login(user)
+
+    response = api.post(
+        f"/api/v1/services/{service.id}/complete/",
+        {"notes": "Trabajo finalizado.", "collected_amount": "400.00"},
+        format="json",
+    )
+
+    assert response.status_code == 200
+    assert response.data["status"] == Service.Status.COMPLETED
+    assert "paid_amount" not in response.data
+    assert "payments" not in response.data
+    assert Payment.objects.filter(service=service, amount=Decimal("400.00"), recorded_by=user).exists()
 
 
 @pytest.mark.django_db

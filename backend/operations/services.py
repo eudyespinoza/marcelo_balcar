@@ -1,11 +1,11 @@
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
-from .models import AuditEvent, Payment, Service, ServiceEvent, SyncConflict, SyncOperation, User
+from .models import AuditEvent, Payment, PaymentMethod, Service, ServiceEvent, SyncConflict, SyncOperation, User
 from .permissions import can_operate_service, get_technician_profile
 from .realtime import publish_service_change
 
@@ -55,6 +55,23 @@ def _audit(actor, action, instance, metadata=None):
 def _ensure_unlocked(service):
     if service.legacy_locked:
         raise ValidationError("El servicio importado está bloqueado hasta el corte final.")
+
+
+def _validated_payment(service, actor, *, amount, method, paid_at=None, note=""):
+    try:
+        normalized_amount = Decimal(str(amount))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValidationError({"collected_amount": "Ingresá un monto cobrado válido."}) from exc
+    payment = Payment(
+        service=service,
+        amount=normalized_amount,
+        method=method,
+        paid_at=paid_at or timezone.now(),
+        note=note,
+        recorded_by=actor,
+    )
+    payment.full_clean()
+    return payment
 
 
 def find_overlaps(service, technician, scheduled_at, duration_minutes):
@@ -143,7 +160,7 @@ def add_service_note(service_id, actor, note, *, occurred_at=None):
 
 
 @transaction.atomic
-def complete_service(service_id, actor, notes, *, occurred_at=None):
+def complete_service(service_id, actor, notes, *, occurred_at=None, collected_amount=None):
     notes = (notes or "").strip()
     if not notes:
         raise ValidationError("Debe registrar una observación antes de finalizar.")
@@ -153,12 +170,29 @@ def complete_service(service_id, actor, notes, *, occurred_at=None):
         raise PermissionDenied("No puede operar este servicio.")
     if service.status != Service.Status.IN_PROGRESS:
         raise ValidationError("Solo un servicio en curso puede finalizarse.")
+    completed_at = occurred_at or timezone.now()
+    payment = None
+    if collected_amount not in [None, ""]:
+        cash_method = PaymentMethod.objects.filter(code="cash", active=True).first()
+        if not cash_method:
+            raise ValidationError({"collected_amount": "El medio de pago Efectivo no está disponible."})
+        payment = _validated_payment(
+            service,
+            actor,
+            amount=collected_amount,
+            method=cash_method,
+            paid_at=completed_at,
+            note="Cobrado por el técnico al finalizar el servicio.",
+        )
     service.completion_notes = notes
-    service.completed_at = occurred_at or timezone.now()
+    service.completed_at = completed_at
     service.status = Service.Status.COMPLETED
     service.version += 1
     service.updated_by = actor
     service.save(update_fields=["completion_notes", "completed_at", "status", "version", "updated_by", "updated_at"])
+    if payment:
+        payment.save()
+        _audit(actor, "payment.create", payment, {"service_id": str(service.id), "amount": str(payment.amount)})
     _event(service, ServiceEvent.Kind.COMPLETED, actor, occurred_at=service.completed_at)
     publish_service_change(service, "completed")
     _notify_admins("Servicio finalizado", f"La orden {str(service.id)[:8]} fue finalizada.", service)
@@ -215,8 +249,7 @@ def reopen_service(service_id, actor, reason):
 def create_payment(service, actor, *, amount, method, paid_at=None, note=""):
     locked_service = Service.objects.select_for_update().get(pk=service.pk)
     _ensure_unlocked(locked_service)
-    payment = Payment(service=locked_service, amount=Decimal(amount), method=method, paid_at=paid_at or timezone.now(), note=note, recorded_by=actor)
-    payment.full_clean()
+    payment = _validated_payment(locked_service, actor, amount=amount, method=method, paid_at=paid_at, note=note)
     payment.save()
     _audit(actor, "payment.create", payment, {"service_id": str(service.id), "amount": str(payment.amount)})
     return payment
@@ -283,7 +316,13 @@ def apply_sync_operation(actor, data):
         elif operation_type == SyncOperation.Type.ADD_NOTE:
             service = add_service_note(service.id, actor, payload.get("note", ""), occurred_at=occurred_at)
         elif operation_type == SyncOperation.Type.COMPLETE:
-            service = complete_service(service.id, actor, payload.get("notes", ""), occurred_at=occurred_at)
+            service = complete_service(
+                service.id,
+                actor,
+                payload.get("notes", ""),
+                occurred_at=occurred_at,
+                collected_amount=payload.get("collected_amount"),
+            )
         else:
             raise ValidationError("Tipo de operación no soportado.")
     except (ValidationError, PermissionDenied) as exc:

@@ -1672,13 +1672,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ServiceList'
+              $ref: '#/components/schemas/CompleteService'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/ServiceList'
+              $ref: '#/components/schemas/CompleteService'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/ServiceList'
+              $ref: '#/components/schemas/CompleteService'
         required: true
       security:
       - cookieAuth: []
@@ -1687,7 +1687,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ServiceList'
+                $ref: '#/components/schemas/ServiceDetail'
           description: ''
   /api/v1/services/{id}/history/:
     get:
@@ -2485,6 +2485,18 @@ components:
       - phone
       - services_count
       - updated_at
+    CompleteService:
+      type: object
+      properties:
+        notes:
+          type: string
+        collected_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,2})?$
+          nullable: true
+      required:
+      - notes
     Csrf:
       type: object
       properties:
@@ -2527,6 +2539,9 @@ components:
         date:
           type: string
           format: date
+        range:
+          type: object
+          additionalProperties: {}
         counts:
           type: object
           additionalProperties:
@@ -2573,6 +2588,7 @@ components:
       - finance
       - overview
       - payment_methods
+      - range
       - revenue_trend
       - service_trend
       - services

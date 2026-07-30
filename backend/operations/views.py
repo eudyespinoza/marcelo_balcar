@@ -32,6 +32,7 @@ from .serializers import (
     ApplicationSettingsSerializer,
     ChangePasswordSerializer,
     ClientSerializer,
+    CompleteServiceSerializer,
     CsrfSerializer,
     DailyCashSerializer,
     DataIssueSerializer,
@@ -519,11 +520,19 @@ class ServiceViewSet(viewsets.ModelViewSet):
         service = arrive_service(pk, request.user)
         return Response(ServiceDetailSerializer(service, context={"request": request}).data)
 
+    @extend_schema(request=CompleteServiceSerializer, responses=ServiceDetailSerializer)
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
         if not can_operate_service(request.user, self.get_object()):
             _require_perm(request.user, "operations.complete_service")
-        service = complete_service(pk, request.user, request.data.get("notes", ""))
+        serializer = CompleteServiceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        service = complete_service(
+            pk,
+            request.user,
+            serializer.validated_data["notes"],
+            collected_amount=serializer.validated_data.get("collected_amount"),
+        )
         return Response(ServiceDetailSerializer(service, context={"request": request}).data)
 
     @action(detail=True, methods=["post"])

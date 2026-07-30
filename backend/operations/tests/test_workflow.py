@@ -5,7 +5,7 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from operations.models import Address, Client, PaymentMethod, Service, SyncConflict, TechnicianProfile, User
+from operations.models import Address, Client, Payment, PaymentMethod, Service, SyncConflict, TechnicianProfile, User
 from operations.permissions import GROUP_TECHNICIAN
 from operations.services import apply_sync_operation, arrive_service, assign_service, complete_service, create_payment, void_payment
 
@@ -77,6 +77,71 @@ def test_completion_requires_note(technician, assigned_service):
     arrive_service(assigned_service.id, user)
     with pytest.raises(ValidationError):
         complete_service(assigned_service.id, user, "  ")
+
+
+@pytest.mark.django_db
+def test_technician_can_record_cash_when_completing(technician, assigned_service):
+    user, _ = technician
+    assigned_service.amount_due = Decimal("1000.00")
+    assigned_service.save(update_fields=["amount_due", "updated_at"])
+    arrive_service(assigned_service.id, user)
+
+    completed = complete_service(
+        assigned_service.id,
+        user,
+        "Se completó el mantenimiento.",
+        collected_amount="350.50",
+    )
+
+    payment = Payment.objects.get(service=completed)
+    assert payment.amount == Decimal("350.50")
+    assert payment.method.code == "cash"
+    assert payment.recorded_by == user
+    assert payment.paid_at == completed.completed_at
+
+
+@pytest.mark.django_db
+def test_invalid_collection_rolls_back_completion(technician, assigned_service):
+    user, _ = technician
+    assigned_service.amount_due = Decimal("100.00")
+    assigned_service.save(update_fields=["amount_due", "updated_at"])
+    arrive_service(assigned_service.id, user)
+
+    with pytest.raises(ValidationError):
+        complete_service(
+            assigned_service.id,
+            user,
+            "Trabajo terminado.",
+            collected_amount="100.01",
+        )
+
+    assigned_service.refresh_from_db()
+    assert assigned_service.status == Service.Status.IN_PROGRESS
+    assert assigned_service.completed_at is None
+    assert not Payment.objects.filter(service=assigned_service).exists()
+
+
+@pytest.mark.django_db
+def test_offline_completion_records_collection_once(technician, assigned_service):
+    user, _ = technician
+    assigned_service.amount_due = Decimal("1000.00")
+    assigned_service.save(update_fields=["amount_due", "updated_at"])
+    arrived = arrive_service(assigned_service.id, user)
+    operation = {
+        "operation_id": "c4f7d8f5-6ab6-4211-8e4b-70bf1b1057a8",
+        "service_id": assigned_service.id,
+        "type": "COMPLETE",
+        "base_version": arrived.version,
+        "occurred_at": timezone.now(),
+        "payload": {"notes": "Cierre sin conexión.", "collected_amount": "250.00"},
+    }
+
+    first = apply_sync_operation(user, operation)
+    duplicate = apply_sync_operation(user, operation)
+
+    assert first["status"] == "applied"
+    assert duplicate["status"] == "duplicate"
+    assert Payment.objects.filter(service=assigned_service, amount=Decimal("250.00")).count() == 1
 
 
 @pytest.mark.django_db

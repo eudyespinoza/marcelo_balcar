@@ -1,6 +1,6 @@
 # Marcelo Balcar · Centro de operaciones
 
-PWA para administrar clientes, domicilios, servicios técnicos, agenda, ejecución móvil, cobranza, caja y permisos. El sistema usa Django 5.2 LTS, React/TypeScript, PostgreSQL 17, Redis/Channels, Celery y Caddy.
+PWA para administrar clientes, domicilios, servicios técnicos, agenda, ejecución móvil, cobranza, caja y permisos. Al finalizar un servicio, el técnico puede registrar el monto cobrado en efectivo. El sistema usa Django 5.2 LTS, React/TypeScript, PostgreSQL 17, Redis/Channels, Celery y Caddy.
 
 ## Puesta en marcha local
 
@@ -103,6 +103,6 @@ Retención: 7 diarios, 4 semanales y 6 mensuales. El procedimiento de restauraci
 
 ## Alcance y privacidad
 
-Los técnicos reciben únicamente clientes vinculados a sus órdenes y nunca reciben DNI, mora, condición, notas administrativas, importes ni pagos. Las fotos se sirven por un endpoint autenticado, no como archivos públicos. Las acciones sensibles se validan en backend, se auditan y respetan el rol incluso si se invoca la API directamente.
+Los técnicos reciben únicamente clientes vinculados a sus órdenes y nunca reciben DNI, mora, condición, notas administrativas ni el historial de importes o pagos. Pueden registrar un cobro en efectivo al finalizar el servicio, pero la información financiera continúa restringida a los roles autorizados. Las fotos se sirven por un endpoint autenticado, no como archivos públicos. Las acciones sensibles se validan en backend, se auditan y respetan el rol incluso si se invoca la API directamente.
 
 Inventario, ventas, facturación fiscal, gastos, GPS/mapas, portal del cliente, WhatsApp automático y múltiples técnicos por servicio quedan fuera de esta versión.

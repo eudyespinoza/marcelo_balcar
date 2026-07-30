@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib.auth.models import Group, Permission
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
@@ -227,6 +229,17 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     def get_recorded_by_name(self, instance) -> str:
         return instance.recorded_by.get_full_name() or instance.recorded_by.username
+
+
+class CompleteServiceSerializer(serializers.Serializer):
+    notes = serializers.CharField(allow_blank=False, trim_whitespace=True)
+    collected_amount = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        required=False,
+        allow_null=True,
+    )
 
 
 class ServiceListSerializer(serializers.ModelSerializer):
