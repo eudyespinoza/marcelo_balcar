@@ -8,9 +8,9 @@ import { Modal } from "./Modal";
 import { MoneyValue } from "./MoneyValue";
 import { StatusBadge } from "./StatusBadge";
 
-export function ServicePanel({ serviceId, onClose, allowFinance = true }: { serviceId: string; onClose: () => void; allowFinance?: boolean }) {
+export function ServicePanel({ serviceId, onClose, allowFinance = true, initialTab = "detail" }: { serviceId: string; onClose: () => void; allowFinance?: boolean; initialTab?: "detail" | "history" | "billing" }) {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<"detail" | "history" | "billing">("detail");
+  const [tab, setTab] = useState<"detail" | "history" | "billing">(initialTab);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const serviceQuery = useQuery({ queryKey: ["service", serviceId], queryFn: () => api<Service>(`/services/${serviceId}/`) });
@@ -19,7 +19,8 @@ export function ServicePanel({ serviceId, onClose, allowFinance = true }: { serv
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["service", serviceId] }), queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-      queryClient.invalidateQueries({ queryKey: ["services"] }), queryClient.invalidateQueries({ queryKey: ["calendar"] })
+      queryClient.invalidateQueries({ queryKey: ["services"] }), queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+      queryClient.invalidateQueries({ queryKey: ["client-account"] })
     ]);
   };
   const action = useMutation({

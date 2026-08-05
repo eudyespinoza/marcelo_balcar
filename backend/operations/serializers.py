@@ -370,6 +370,36 @@ class ServiceDetailSerializer(ServiceListSerializer):
         return data
 
 
+class ClientAccountServiceSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    description = serializers.CharField()
+    scheduled_at = serializers.DateTimeField(allow_null=True)
+    status = serializers.CharField()
+    status_label = serializers.CharField()
+    amount_due = serializers.DecimalField(max_digits=12, decimal_places=2)
+    paid_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    balance = serializers.DecimalField(max_digits=12, decimal_places=2)
+    payment_status = serializers.CharField()
+
+
+class ClientAccountPaymentSerializer(PaymentSerializer):
+    service_description = serializers.CharField(source="service.description", read_only=True)
+
+    class Meta(PaymentSerializer.Meta):
+        fields = PaymentSerializer.Meta.fields + ["service_description"]
+
+
+class ClientAccountSerializer(serializers.Serializer):
+    client = serializers.UUIDField()
+    is_delinquent = serializers.BooleanField()
+    billed_total = serializers.DecimalField(max_digits=14, decimal_places=2)
+    collected_total = serializers.DecimalField(max_digits=14, decimal_places=2)
+    outstanding_total = serializers.DecimalField(max_digits=14, decimal_places=2)
+    last_payment = ClientAccountPaymentSerializer(allow_null=True)
+    outstanding_services = ClientAccountServiceSerializer(many=True)
+    payments = ClientAccountPaymentSerializer(many=True)
+
+
 class SyncOperationInputSerializer(serializers.Serializer):
     operation_id = serializers.UUIDField()
     service_id = serializers.UUIDField()
@@ -438,6 +468,7 @@ class DashboardSerializer(serializers.Serializer):
     services = ServiceListSerializer(many=True)
     overview = serializers.DictField()
     finance = serializers.DictField(allow_null=True)
+    accounts = serializers.DictField()
     service_trend = serializers.ListField(child=serializers.DictField())
     revenue_trend = serializers.ListField(child=serializers.DictField())
     status_breakdown = serializers.ListField(child=serializers.DictField())

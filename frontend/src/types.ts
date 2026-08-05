@@ -76,6 +76,30 @@ export interface Payment {
   recorded_by_name: string;
   voided_at: string | null;
   void_reason: string;
+  service_description?: string;
+}
+
+export interface ClientAccountService {
+  id: string;
+  description: string;
+  scheduled_at: string | null;
+  status: ServiceStatus;
+  status_label: string;
+  amount_due: string;
+  paid_amount: string;
+  balance: string;
+  payment_status: "PENDING" | "PARTIAL";
+}
+
+export interface ClientAccount {
+  client: string;
+  is_delinquent: boolean;
+  billed_total: string;
+  collected_total: string;
+  outstanding_total: string;
+  last_payment: Payment | null;
+  outstanding_services: ClientAccountService[];
+  payments: Payment[];
 }
 
 export interface Service {
@@ -134,11 +158,22 @@ export interface DashboardData {
     collection_rate: number;
     collected_this_month: string;
   };
+  accounts: {
+    delinquent: DashboardAccount[];
+    outstanding: DashboardAccount[];
+  };
   service_trend: Array<{ date: string; scheduled: number; completed: number; cancelled: number }>;
   revenue_trend: Array<{ date: string; collected: string }>;
   status_breakdown: Array<{ status: ServiceStatus; label: string; count: number }>;
   technician_workload: Array<{ id: string; name: string; total: number; completed: number; open: number }>;
   payment_methods: Array<{ name: string; total: string; count: number }>;
+}
+
+export interface DashboardAccount {
+  id: string;
+  name: string;
+  is_delinquent: boolean;
+  outstanding_balance: string | null;
 }
 
 export interface Paginated<T> { count: number; next: string | null; previous: string | null; results: T[] }

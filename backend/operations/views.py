@@ -31,6 +31,7 @@ from .serializers import (
     AddressSerializer,
     ApplicationSettingsSerializer,
     ChangePasswordSerializer,
+    ClientAccountSerializer,
     ClientSerializer,
     CompleteServiceSerializer,
     CsrfSerializer,
@@ -133,6 +134,42 @@ def _shift_month(value: date, months: int) -> date:
 
 def _money(value) -> str:
     return f"{Decimal(value or 0):.2f}"
+
+
+def _dashboard_account_rows(clients, billable_services, valid_payments):
+    billed_by_client = {
+        row["client_id"]: row["total"] or Decimal("0.00")
+        for row in billable_services.values("client_id").annotate(total=Sum("amount_due"))
+    }
+    paid_by_client = {
+        row["service__client_id"]: row["total"] or Decimal("0.00")
+        for row in valid_payments.values("service__client_id").annotate(total=Sum("amount"))
+    }
+    balances = {
+        client_id: max(billed - paid_by_client.get(client_id, Decimal("0.00")), Decimal("0.00"))
+        for client_id, billed in billed_by_client.items()
+    }
+    delinquent_ids = set(clients.filter(is_delinquent=True).values_list("id", flat=True))
+    outstanding_ids = {client_id for client_id, balance in balances.items() if balance > 0}
+    relevant_clients = clients.filter(pk__in=delinquent_ids | outstanding_ids).values("id", "name", "is_delinquent")
+    rows_by_id = {
+        row["id"]: {
+            "id": str(row["id"]),
+            "name": row["name"],
+            "is_delinquent": row["is_delinquent"],
+            "outstanding_balance": _money(balances.get(row["id"])),
+        }
+        for row in relevant_clients
+    }
+
+    def ordered(client_ids):
+        rows = [rows_by_id[client_id] for client_id in client_ids if client_id in rows_by_id]
+        return sorted(rows, key=lambda row: (-Decimal(row["outstanding_balance"]), row["name"].casefold()))
+
+    return {
+        "delinquent": ordered(delinquent_ids),
+        "outstanding": ordered(outstanding_ids),
+    }
 
 
 def _dashboard_periods(start_date: date, end_date: date, granularity: str):
@@ -315,6 +352,67 @@ class ClientViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=["archived_at", "updated_at"])
         _record_audit(request.user, "client.restore", instance)
         return Response(self.get_serializer(instance).data)
+
+    @extend_schema(responses=ClientAccountSerializer)
+    @action(detail=True, methods=["get"], url_path="account")
+    def account(self, request, pk=None):
+        _require_perm(request.user, "operations.view_billing")
+        instance = self.get_object()
+        billable_services = list(
+            Service.objects.filter(
+                client=instance,
+                archived_at__isnull=True,
+                amount_due__isnull=False,
+            )
+            .exclude(status=Service.Status.CANCELLED)
+            .order_by("-scheduled_at", "-created_at")
+        )
+        service_ids = [service.id for service in billable_services]
+        valid_payments = Payment.objects.filter(
+            service_id__in=service_ids,
+            voided_at__isnull=True,
+        ).select_related("service", "method", "recorded_by")
+        all_payments = Payment.objects.filter(service_id__in=service_ids).select_related(
+            "service", "method", "recorded_by"
+        )
+        paid_by_service = {
+            item["service_id"]: item["total"] or Decimal("0.00")
+            for item in valid_payments.values("service_id").annotate(total=Sum("amount"))
+        }
+        outstanding_services = []
+        billed_total = Decimal("0.00")
+        collected_total = Decimal("0.00")
+        for service in billable_services:
+            amount_due = service.amount_due or Decimal("0.00")
+            paid_amount = paid_by_service.get(service.id, Decimal("0.00"))
+            balance = max(amount_due - paid_amount, Decimal("0.00"))
+            billed_total += amount_due
+            collected_total += paid_amount
+            if balance <= 0:
+                continue
+            outstanding_services.append({
+                "id": service.id,
+                "description": service.description,
+                "scheduled_at": service.scheduled_at,
+                "status": service.status,
+                "status_label": service.get_status_display(),
+                "amount_due": amount_due,
+                "paid_amount": paid_amount,
+                "balance": balance,
+                "payment_status": "PARTIAL" if paid_amount > 0 else "PENDING",
+            })
+        outstanding_services.sort(key=lambda service: (-service["balance"], service["description"].lower()))
+        payload = {
+            "client": instance.id,
+            "is_delinquent": instance.is_delinquent,
+            "billed_total": billed_total,
+            "collected_total": collected_total,
+            "outstanding_total": max(billed_total - collected_total, Decimal("0.00")),
+            "last_payment": valid_payments.first(),
+            "outstanding_services": outstanding_services,
+            "payments": all_payments,
+        }
+        return Response(ClientAccountSerializer(payload, context={"request": request}).data)
 
 
 class AddressViewSet(viewsets.ModelViewSet):
@@ -780,6 +878,18 @@ class DashboardTodayView(APIView):
             for item in workload_rows
         ]
 
+        accounts = {
+            "delinquent": [
+                {
+                    "id": str(item["id"]),
+                    "name": item["name"],
+                    "is_delinquent": True,
+                    "outstanding_balance": None,
+                }
+                for item in clients.filter(is_delinquent=True).values("id", "name").order_by("name")
+            ],
+            "outstanding": [],
+        }
         finance = None
         revenue_trend = []
         payment_methods = []
@@ -797,6 +907,7 @@ class DashboardTodayView(APIView):
             month_end = timezone.make_aware(datetime.combine(next_month, time.min))
             collected_this_month = valid_payments.filter(paid_at__gte=month_start, paid_at__lt=month_end).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
             outstanding_total = max(billed_total - collected_total, Decimal("0.00"))
+            accounts = _dashboard_account_rows(clients, billable_services, valid_payments)
             finance = {
                 "billed_total": _money(billed_total),
                 "collected_total": _money(collected_total),
@@ -836,6 +947,7 @@ class DashboardTodayView(APIView):
             "services": ServiceListSerializer(services, many=True, context={"request": request}).data,
             "overview": overview,
             "finance": finance,
+            "accounts": accounts,
             "service_trend": service_trend,
             "revenue_trend": revenue_trend,
             "status_breakdown": status_breakdown,

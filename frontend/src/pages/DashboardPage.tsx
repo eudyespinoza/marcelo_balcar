@@ -1,12 +1,13 @@
 import { useState, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CircleDollarSign, Receipt, TrendingUp, UserCog, Users, Wallet, Wrench } from "lucide-react";
+import { AlertTriangle, ChevronRight, CircleDollarSign, Receipt, TrendingUp, UserCog, Users, Wallet, Wrench } from "lucide-react";
 import { api } from "../lib/api";
 import { dashboardPresetRange, type DashboardRangePreset } from "../lib/dashboardRange";
 import { currency, TZ } from "../lib/format";
 import type { DashboardData, ServiceStatus } from "../types";
 import { BarRanking, TrendChart, type BarDatum } from "../components/DashboardCharts";
 import { MoneyValue } from "../components/MoneyValue";
+import { DashboardAccountsDialog, type DashboardAccountMode } from "../components/DashboardAccountsDialog";
 
 const statusColors: Record<ServiceStatus, string> = {
   PENDING: "#777268", ASSIGNED: "#3977a2", IN_PROGRESS: "#e45a18", COMPLETED: "#288067", CANCELLED: "#a44b43"
@@ -15,6 +16,7 @@ const statusColors: Record<ServiceStatus, string> = {
 export function DashboardPage() {
   const [preset, setPreset] = useState<DashboardRangePreset>("year");
   const [range, setRange] = useState(() => dashboardPresetRange("year"));
+  const [accountMode, setAccountMode] = useState<DashboardAccountMode | null>(null);
   const validRange = range.start <= range.end;
   const dashboard = useQuery({
     queryKey: ["dashboard", range.start, range.end],
@@ -49,16 +51,23 @@ export function DashboardPage() {
     {data && <>
       <section className="dashboard-kpis" aria-label="Indicadores principales">
         <KpiCard icon={Users} label="Clientes activos" value={data.overview.clients_total.toLocaleString("es-AR")} hint={`${data.overview.delinquent_clients} en mora`} />
-        <KpiCard icon={AlertTriangle} label="Clientes en mora" value={data.overview.delinquent_clients.toLocaleString("es-AR")} hint={`${delinquencyRate.toFixed(1)}% de la cartera`} tone={data.overview.delinquent_clients ? "danger" : "success"} />
+        <KpiCard icon={AlertTriangle} label="Clientes en mora" value={data.overview.delinquent_clients.toLocaleString("es-AR")} hint={`${delinquencyRate.toFixed(1)}% de la cartera`} tone={data.overview.delinquent_clients ? "danger" : "success"} actionLabel="Ver cuentas" expanded={accountMode === "delinquent"} controls="dashboard-delinquent-accounts" onClick={() => setAccountMode("delinquent")} />
         <KpiCard icon={UserCog} label="Usuarios activos" value={data.overview.active_users.toLocaleString("es-AR")} hint={`${data.overview.active_technicians} técnicos activos`} />
         <KpiCard icon={Wrench} label="Servicios registrados" value={data.overview.services_total.toLocaleString("es-AR")} hint={`${data.overview.completion_rate.toFixed(1)}% finalizados`} />
         {data.finance && <>
           <KpiCard icon={Receipt} label="Total facturado" value={currency(data.finance.billed_total)} hint="Servicios con importe" tone="dark" money />
           <KpiCard icon={CircleDollarSign} label="Total cobrado" value={currency(data.finance.collected_total)} hint={`${data.finance.collection_rate.toFixed(1)}% recuperado`} tone="success" money />
-          <KpiCard icon={Wallet} label="Saldo pendiente" value={currency(data.finance.outstanding_total)} hint={`${currency(data.finance.delinquent_balance)} en clientes morosos`} tone="warning" money />
+          <KpiCard icon={Wallet} label="Saldo pendiente" value={currency(data.finance.outstanding_total)} hint={`${currency(data.finance.delinquent_balance)} en clientes morosos`} tone="warning" money actionLabel="Ver cuentas" expanded={accountMode === "outstanding"} controls="dashboard-outstanding-accounts" onClick={() => setAccountMode("outstanding")} />
           <KpiCard icon={TrendingUp} label="Cobrado este mes" value={currency(data.finance.collected_this_month)} hint="Ingresos no anulados" money />
         </>}
       </section>
+
+      {accountMode && <DashboardAccountsDialog
+        mode={accountMode}
+        accounts={data.accounts[accountMode]}
+        total={accountMode === "delinquent" ? data.finance?.delinquent_balance ?? null : data.finance?.outstanding_total ?? null}
+        onClose={() => setAccountMode(null)}
+      />}
 
       <section className="dashboard-insights">
         <article className="insight-card insight-wide"><InsightHeader eyebrow="SERVICIOS" title={data.range.granularity === "month" ? "Servicios por mes" : "Servicios por día"} detail={rangeDetail} /><TrendChart ariaLabel="Servicios programados, finalizados y cancelados en el período seleccionado" data={serviceTrend} series={[
@@ -78,8 +87,22 @@ export function DashboardPage() {
   </div>;
 }
 
-export function KpiCard({ icon: Icon, label, value, hint, tone = "default", money = false }: { icon: ComponentType; label: string; value: string; hint: string; tone?: "default" | "danger" | "success" | "warning" | "dark"; money?: boolean }) {
-  return <article className={`dashboard-kpi kpi-${tone}${money ? " kpi-money" : ""}`}><span><Icon /></span><div><small>{label}</small>{money ? <MoneyValue as="strong" value={value} /> : <strong>{value}</strong>}<p>{hint}</p></div></article>;
+export function KpiCard({ icon: Icon, label, value, hint, tone = "default", money = false, actionLabel, expanded = false, controls, onClick }: {
+  icon: ComponentType;
+  label: string;
+  value: string;
+  hint: string;
+  tone?: "default" | "danger" | "success" | "warning" | "dark";
+  money?: boolean;
+  actionLabel?: string;
+  expanded?: boolean;
+  controls?: string;
+  onClick?: () => void;
+}) {
+  const className = `dashboard-kpi kpi-${tone}${money ? " kpi-money" : ""}${onClick ? " kpi-actionable" : ""}`;
+  const content = <><span className="kpi-icon"><Icon /></span><span className="kpi-body"><small>{label}</small>{money ? <MoneyValue as="strong" value={value} /> : <strong>{value}</strong>}<span className="kpi-hint">{hint}</span></span>{onClick && <span className="kpi-drilldown">{actionLabel ?? "Ver detalle"}<ChevronRight /></span>}</>;
+  if (onClick) return <button type="button" className={className} onClick={onClick} aria-haspopup="dialog" aria-expanded={expanded} aria-controls={controls}>{content}</button>;
+  return <article className={className}>{content}</article>;
 }
 
 function InsightHeader({ eyebrow, title, detail }: { eyebrow: string; title: string; detail: string }) {

@@ -64,6 +64,7 @@ function App() {
   if (user.must_change_password) return <ChangePasswordPage onChanged={() => void session.refetch()} />;
   const technicianOnly = isTechnicianOnly(user);
   const canViewDelinquency = user.permissions.includes("operations.view_client_sensitive");
+  const canViewBilling = user.permissions.includes("operations.view_billing");
   const canManageSettings = user.permissions.includes("operations.change_applicationsettings");
   const logout = async () => {
     if (navigator.onLine) await syncOffline().catch(() => void 0);
@@ -78,7 +79,7 @@ function App() {
         <Route path="/" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <OperationPage />} />
         <Route path="/dashboard" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <DashboardPage />} />
         <Route path="/clientes" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <ClientsPage canViewDelinquency={canViewDelinquency} />} />
-        <Route path="/clientes/:id" element={<ClientDetailPage technician={technicianOnly} />} />
+        <Route path="/clientes/:id" element={<ClientDetailPage technician={technicianOnly} canViewBilling={canViewBilling} />} />
         <Route path="/calendario" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <CalendarPage />} />
         <Route path="/tecnico" element={user.is_technician ? <TechnicianPage /> : <Navigate to="/" replace />} />
         <Route path="/caja" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <CashPage />} />
