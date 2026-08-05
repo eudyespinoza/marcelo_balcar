@@ -17,7 +17,7 @@ const metrics: Array<{ key: ServiceStatus | "UNASSIGNED"; label: string; icon: t
   { key: "CANCELLED", label: "Cancelados", icon: AlertTriangle }
 ];
 
-export function OperationPage() {
+export function OperationPage({ canViewBilling = false, canManageBilling = false }: { canViewBilling?: boolean; canManageBilling?: boolean }) {
   const [selected, setSelected] = useState<string | null>(null);
   const operation = useQuery({ queryKey: ["dashboard"], queryFn: () => api<DashboardData>("/dashboard/today/"), refetchInterval: 60_000 });
   const now = new Date();
@@ -45,6 +45,6 @@ export function OperationPage() {
         {!data.services.length && <EmptyState icon={CheckCircle2} title="Jornada despejada" detail="No hay servicios programados para hoy." />}
       </section>
     </>}
-    {selected && <ServicePanel serviceId={selected} onClose={() => setSelected(null)} />}
+    {selected && <ServicePanel serviceId={selected} onClose={() => setSelected(null)} allowFinance={canViewBilling} allowPaymentManagement={canManageBilling} />}
   </div>;
 }

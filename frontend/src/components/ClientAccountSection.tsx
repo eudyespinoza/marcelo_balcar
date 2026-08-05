@@ -1,16 +1,22 @@
 import { useState } from "react";
-import { AlertTriangle, Banknote, ChevronRight, CircleCheckBig, ReceiptText, WalletCards } from "lucide-react";
+import { AlertTriangle, Banknote, ChevronRight, CircleCheckBig, Plus, ReceiptText, WalletCards } from "lucide-react";
 import { currency, dateTime } from "../lib/format";
 import type { ClientAccount } from "../types";
 import { MoneyValue } from "./MoneyValue";
 import { StatusBadge } from "./StatusBadge";
+import { ClientPaymentDialog } from "./ClientPaymentDialog";
 
-export function ClientAccountSection({ account, pending, onSelectService }: {
+export function ClientAccountSection({ account, pending, clientName = "Cliente", canManagePayments = false, onSelectService }: {
   account?: ClientAccount;
   pending: boolean;
+  clientName?: string;
+  canManagePayments?: boolean;
   onSelectService: (serviceId: string) => void;
 }) {
   const [showAllPayments, setShowAllPayments] = useState(false);
+  const [paymentServiceId, setPaymentServiceId] = useState<string | undefined>();
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentNotice, setPaymentNotice] = useState("");
 
   if (pending) return <section className="client-account-section client-account-loading" aria-busy="true" aria-label="Cargando cuenta corriente"><span /></section>;
   if (!account) return null;
@@ -22,11 +28,16 @@ export function ClientAccountSection({ account, pending, onSelectService }: {
   return <section className={`client-account-section${account.is_delinquent ? " is-delinquent" : ""}`} aria-labelledby="client-account-title">
     <header>
       <div><p className="eyebrow">CUENTA CORRIENTE</p><h2 id="client-account-title">Estado financiero</h2></div>
-      <span className={`client-account-state ${account.is_delinquent ? "danger" : hasOutstanding ? "warning" : "success"}`}>
-        {account.is_delinquent ? <AlertTriangle /> : hasOutstanding ? <WalletCards /> : <CircleCheckBig />}
-        {statusLabel}
-      </span>
+      <div className="client-account-header-actions">
+        <span className={`client-account-state ${account.is_delinquent ? "danger" : hasOutstanding ? "warning" : "success"}`}>
+          {account.is_delinquent ? <AlertTriangle /> : hasOutstanding ? <WalletCards /> : <CircleCheckBig />}
+          {statusLabel}
+        </span>
+        {canManagePayments && hasOutstanding && <button type="button" className="button primary" onClick={() => { setPaymentServiceId(undefined); setPaymentNotice(""); setPaymentDialogOpen(true); }}><Plus /> Registrar pago</button>}
+      </div>
     </header>
+
+    {paymentNotice && <div className="client-account-payment-notice" role="status"><CircleCheckBig /> {paymentNotice}</div>}
 
     <div className="client-account-summary" aria-label="Resumen financiero del cliente">
       <article className="client-account-primary"><span>Saldo pendiente</span><MoneyValue as="strong" value={currency(account.outstanding_total)} /><small>{account.outstanding_services.length} {account.outstanding_services.length === 1 ? "servicio con saldo" : "servicios con saldo"}</small></article>
@@ -41,12 +52,15 @@ export function ClientAccountSection({ account, pending, onSelectService }: {
       <section aria-labelledby="outstanding-services-title">
         <header><div><p className="eyebrow">DEUDA ABIERTA</p><h3 id="outstanding-services-title">Servicios con saldo</h3></div><span>{account.outstanding_services.length}</span></header>
         <div className="client-account-service-list">
-          {account.outstanding_services.map((service) => <button key={service.id} onClick={() => onSelectService(service.id)} aria-label={`Abrir cobranza de ${service.description}`}>
-            <span className="client-account-service-copy"><strong>Orden {service.id.slice(0, 8).toUpperCase()}</strong><small>{service.description || "Servicio sin descripción"}</small><em>{dateTime(service.scheduled_at)}</em></span>
-            <StatusBadge status={service.status} />
-            <span className="client-account-service-money"><MoneyValue as="strong" value={currency(service.balance)} /><small>{currency(service.paid_amount)} cobrado</small></span>
-            <ChevronRight />
-          </button>)}
+          {account.outstanding_services.map((service) => <article className="client-account-service-row" key={service.id}>
+            <button className="client-account-service-open" onClick={() => onSelectService(service.id)} aria-label={`Abrir cobranza de ${service.description}`}>
+              <span className="client-account-service-copy"><strong>Orden {service.id.slice(0, 8).toUpperCase()}</strong><small>{service.description || "Servicio sin descripción"}</small><em>{dateTime(service.scheduled_at)}</em></span>
+              <StatusBadge status={service.status} />
+              <span className="client-account-service-money"><MoneyValue as="strong" value={currency(service.balance)} /><small>{currency(service.paid_amount)} cobrado</small></span>
+              <ChevronRight />
+            </button>
+            {canManagePayments && <button type="button" className="client-account-service-pay" onClick={() => { setPaymentServiceId(service.id); setPaymentNotice(""); setPaymentDialogOpen(true); }}><Banknote /> Registrar pago</button>}
+          </article>)}
           {!account.outstanding_services.length && <div className="client-account-empty"><CircleCheckBig /><strong>Sin servicios con saldo</strong><p>Los servicios facturados están completamente cobrados.</p></div>}
         </div>
       </section>
@@ -65,5 +79,6 @@ export function ClientAccountSection({ account, pending, onSelectService }: {
         {account.payments.length > 5 && <button type="button" className="client-account-more" onClick={() => setShowAllPayments((value) => !value)}>{showAllPayments ? "Ver menos movimientos" : `Ver los ${account.payments.length} movimientos`}</button>}
       </section>
     </div>
+    {paymentDialogOpen && <ClientPaymentDialog account={account} clientName={clientName} initialServiceId={paymentServiceId} onClose={() => setPaymentDialogOpen(false)} onSaved={() => { setPaymentDialogOpen(false); setPaymentNotice("Pago registrado correctamente. La cuenta corriente, el dashboard y Caja fueron actualizados."); }} />}
   </section>;
 }

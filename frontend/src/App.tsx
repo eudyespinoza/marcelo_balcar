@@ -65,6 +65,7 @@ function App() {
   const technicianOnly = isTechnicianOnly(user);
   const canViewDelinquency = user.permissions.includes("operations.view_client_sensitive");
   const canViewBilling = user.permissions.includes("operations.view_billing");
+  const canManageBilling = user.permissions.includes("operations.manage_billing");
   const canManageSettings = user.permissions.includes("operations.change_applicationsettings");
   const logout = async () => {
     if (navigator.onLine) await syncOffline().catch(() => void 0);
@@ -76,11 +77,11 @@ function App() {
     <Layout user={user} vapidKey={session.data.vapid_public_key} onLogout={logout}>
       <Suspense fallback={<div className="page panel-loading">Preparando pantalla…</div>}>
       <Routes>
-        <Route path="/" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <OperationPage />} />
+        <Route path="/" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <OperationPage canViewBilling={canViewBilling} canManageBilling={canManageBilling} />} />
         <Route path="/dashboard" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <DashboardPage />} />
         <Route path="/clientes" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <ClientsPage canViewDelinquency={canViewDelinquency} />} />
-        <Route path="/clientes/:id" element={<ClientDetailPage technician={technicianOnly} canViewBilling={canViewBilling} />} />
-        <Route path="/calendario" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <CalendarPage />} />
+        <Route path="/clientes/:id" element={<ClientDetailPage technician={technicianOnly} canViewBilling={canViewBilling} canManageBilling={canManageBilling} />} />
+        <Route path="/calendario" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <CalendarPage canViewBilling={canViewBilling} canManageBilling={canManageBilling} />} />
         <Route path="/tecnico" element={user.is_technician ? <TechnicianPage /> : <Navigate to="/" replace />} />
         <Route path="/caja" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <CashPage />} />
         <Route path="/seguridad" element={technicianOnly ? <Navigate to="/tecnico" replace /> : <SecurityPage permissions={user.permissions} />} />

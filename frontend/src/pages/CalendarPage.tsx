@@ -14,7 +14,7 @@ import { ServicePanel } from "../components/ServicePanel";
 
 const statusOptions: Array<{ value: "" | ServiceStatus; label: string }> = [{ value: "", label: "Todos los estados" }, { value: "PENDING", label: "Pendientes" }, { value: "ASSIGNED", label: "Asignados" }, { value: "IN_PROGRESS", label: "En curso" }, { value: "COMPLETED", label: "Finalizados" }, { value: "CANCELLED", label: "Cancelados" }];
 
-export function CalendarPage() {
+export function CalendarPage({ canViewBilling = false, canManageBilling = false }: { canViewBilling?: boolean; canManageBilling?: boolean }) {
   const [range, setRange] = useState<{ start: string; end: string } | null>(null);
   const [technician, setTechnician] = useState(""); const [status, setStatus] = useState<"" | ServiceStatus>(""); const [selected, setSelected] = useState<string | null>(null);
   const [mobileCalendar, setMobileCalendar] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 820px)").matches);
@@ -56,7 +56,7 @@ export function CalendarPage() {
       }} eventContent={(arg) => <div className="calendar-event"><b>{arg.timeText}</b><span>{arg.event.title}</span></div>} />
       {!calendar.isPending && !events.length && <div className="calendar-empty"><CalendarDays /><span>No hay servicios en este período con los filtros elegidos.</span></div>}
     </section>
-    {selected && <ServicePanel serviceId={selected} onClose={() => setSelected(null)} />}
+    {selected && <ServicePanel serviceId={selected} onClose={() => setSelected(null)} allowFinance={canViewBilling} allowPaymentManagement={canManageBilling} />}
   </div>;
 }
 

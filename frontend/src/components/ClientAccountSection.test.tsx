@@ -38,7 +38,7 @@ const account: ClientAccount = {
 
 describe("ClientAccountSection", () => {
   it("shows the client totals and links an outstanding service to billing", () => {
-    const markup = renderToStaticMarkup(<ClientAccountSection account={account} pending={false} onSelectService={() => undefined} />);
+    const markup = renderToStaticMarkup(<ClientAccountSection account={account} pending={false} clientName="Cliente en mora" canManagePayments onSelectService={() => undefined} />);
 
     expect(markup).toContain("CUENTA CORRIENTE");
     expect(markup).toContain("Marcado en mora");
@@ -46,6 +46,7 @@ describe("ClientAccountSection", () => {
     expect(markup).toContain("1.000,00");
     expect(markup).toContain('aria-label="Abrir cobranza de Portón principal"');
     expect(markup).toContain("400,00 cobrado");
+    expect(markup.match(/Registrar pago/g)).toHaveLength(2);
   });
 
   it("explains a manual delinquency flag without financial debt", () => {
