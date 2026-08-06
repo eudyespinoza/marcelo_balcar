@@ -666,7 +666,7 @@ class ServiceViewSet(viewsets.ModelViewSet):
                     return Response({"detail": "El identificador idempotente ya fue utilizado."}, status=status.HTTP_409_CONFLICT)
                 return Response(ServicePhotoSerializer(existing, context={"request": request}).data)
         _ensure_photo_access(request.user, service)
-        data = request.data.copy()
+        data = dict(request.data.items())
         data["service"] = str(service.id)
         serializer = ServicePhotoSerializer(data=data, context={"request": request})
         serializer.is_valid(raise_exception=True)

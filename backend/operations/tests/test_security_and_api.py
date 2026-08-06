@@ -212,6 +212,30 @@ def test_nested_photo_upload_is_idempotent(tmp_path, settings):
 
 
 @pytest.mark.django_db
+def test_nested_photo_upload_accepts_files_spooled_to_disk(tmp_path, settings):
+    settings.MEDIA_ROOT = tmp_path
+    settings.FILE_UPLOAD_MAX_MEMORY_SIZE = 1
+    user = User.objects.create_superuser(username="foto-temporal", password="Clave-segura-2026", must_change_password=False)
+    customer = Client.objects.create(name="Cliente foto temporal", phone="3435000013")
+    service = Service.objects.create(client=customer, description="Foto temporal")
+    buffer = BytesIO()
+    Image.new("RGB", (64, 64), "#f16522").save(buffer, format="PNG")
+    upload = SimpleUploadedFile("evidencia-grande.png", buffer.getvalue(), content_type="image/png")
+
+    response = authenticated(user).post(
+        f"/api/v1/services/{service.id}/photos/",
+        {"client_operation_id": uuid.uuid4(), "image": upload},
+        format="multipart",
+    )
+
+    assert response.status_code == 201
+    photo = ServicePhoto.objects.get(pk=response.data["id"])
+    assert photo.image.name.endswith(".png")
+    assert photo.image.storage.exists(photo.image.name)
+    assert len(photo.checksum_sha256) == 64
+
+
+@pytest.mark.django_db
 def test_daily_cash_reports_a_prior_payment_voided_today_as_reversal():
     user = User.objects.create_superuser(username="caja-reversa", password="Clave-segura-2026", must_change_password=False)
     customer = Client.objects.create(name="Cliente reversa", phone="3435000012")
